@@ -20,38 +20,38 @@ const COLOR_MAP: Record<
 > = {
   blue: {
     bg: '#FFFFFF',
-    iconBg: '#E0F2FE',
-    text: '#0369A1',
+    iconBg: '#EFF6FF',
+    text: '#0284C7',
     accent: '#0866C6',
-    border: '#BAE6FD',
+    border: 'rgba(2, 132, 199, 0.22)',
   },
   green: {
     bg: '#FFFFFF',
-    iconBg: '#DCFCE7',
-    text: '#15803D',
+    iconBg: '#F0FDF4',
+    text: '#16A34A',
     accent: '#16A34A',
-    border: '#BBF7D0',
+    border: 'rgba(22, 163, 74, 0.22)',
   },
   orange: {
     bg: '#FFFFFF',
-    iconBg: '#FEF3C7',
-    text: '#B45309',
-    accent: '#F59E0B',
-    border: '#FDE68A',
+    iconBg: '#FFFBEB',
+    text: '#D97706',
+    accent: '#D97706',
+    border: 'rgba(217, 119, 6, 0.25)',
   },
   purple: {
     bg: '#FFFFFF',
-    iconBg: '#EDE9FE',
-    text: '#6D28D9',
+    iconBg: '#FAF5FF',
+    text: '#7C3AED',
     accent: '#7C3AED',
-    border: '#DDD6FE',
+    border: 'rgba(124, 58, 237, 0.22)',
   },
   teal: {
     bg: '#FFFFFF',
-    iconBg: '#CCFBF1',
-    text: '#0F766E',
-    accent: '#13B8A6',
-    border: '#99F6E4',
+    iconBg: '#F0FDFA',
+    text: '#0D9488',
+    accent: '#0D9488',
+    border: 'rgba(13, 148, 136, 0.22)',
   },
 };
 
@@ -75,23 +75,25 @@ export const DoctorKpiCard: React.FC<DoctorKpiCardProps> = ({
       style={[styles.card, { borderColor: theme.border }]}
     >
       <View style={styles.topRow}>
-        <View style={[styles.iconContainer, { backgroundColor: theme.iconBg }]}>
-          {icon}
-        </View>
-        {badge ? (
-          <View style={[styles.badge, { backgroundColor: theme.iconBg }]}>
-            <Text style={[styles.badgeText, { color: theme.text }]}>{badge}</Text>
+        <View style={styles.topLeft}>
+          <View style={[styles.iconContainer, { backgroundColor: theme.iconBg }]}>
+            {icon}
           </View>
-        ) : null}
+          {badge ? (
+            <View style={[styles.badge, { backgroundColor: theme.iconBg }]}>
+              <Text style={[styles.badgeText, { color: theme.text }]}>{badge}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.value}>{value}</Text>
       </View>
 
       <View style={styles.content}>
-        <Text style={[styles.value, { color: '#142D4E' }]}>{value}</Text>
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={2}>
+          <Text style={[styles.subtitle, { color: theme.text }]} numberOfLines={1}>
             {subtitle}
           </Text>
         ) : null}
@@ -108,67 +110,74 @@ export const DoctorKpiCard: React.FC<DoctorKpiCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    minWidth: 150,
+    minWidth: 140,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    shadowColor: '#0866C6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
-    margin: 6,
+    borderRadius: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderWidth: 1.2,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  topLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   iconContainer: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
   },
   badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 9999,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+  },
+  value: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.4,
   },
   content: {
     gap: 2,
   },
-  value: {
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
   title: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    lineHeight: 16,
   },
   subtitle: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#0866C6',
-    marginTop: 3,
+    fontSize: 10.5,
+    fontWeight: '600',
+    lineHeight: 14,
+    marginTop: 1,
   },
   trendRow: {
-    marginTop: 4,
+    marginTop: 2,
     flexDirection: 'row',
     alignItems: 'center',
   },
   trendText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
 });
