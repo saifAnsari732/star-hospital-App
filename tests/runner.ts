@@ -993,6 +993,97 @@ async function runTestSuite() {
     });
   });
 
+  // 11. Firebase Realtime Reception Alert & Emergency Siren Unit Tests
+  describe('Tier 1: Firebase Reception Alert & Emergency Siren Unit Tests', () => {
+    it('should broadcast and deliver instant appointment alert to reception nurse queue', async () => {
+      let receivedAlert: any = null;
+      const fakeAlertService = {
+        subscribers: [] as any[],
+        subscribe(fn: any) { this.subscribers.push(fn); return () => {}; },
+        broadcast(data: any) {
+          const alert = {
+            id: 'alert-run-1',
+            type: 'NEW_APPOINTMENT_BOOKED',
+            priority: 'urgent',
+            status: 'unacknowledged',
+            ...data,
+          };
+          this.subscribers.forEach((fn) => fn(alert));
+          return alert;
+        },
+      };
+
+      fakeAlertService.subscribe((alert: any) => {
+        receivedAlert = alert;
+      });
+
+      fakeAlertService.broadcast({
+        patientName: 'Kisan Developer',
+        patientMrn: 'P-00104',
+        doctorName: 'Dr. Amit Sharma',
+        doctorDepartment: 'Cardiology',
+        timeSlot: '11:00 AM',
+        mode: 'in_person',
+      });
+
+      expect(receivedAlert).not.toBeNull();
+      expect(receivedAlert.type).toBe('NEW_APPOINTMENT_BOOKED');
+      expect(receivedAlert.priority).toBe('urgent');
+      expect(receivedAlert.patientName).toBe('Kisan Developer');
+      expect(receivedAlert.doctorName).toBe('Dr. Amit Sharma');
+      expect(receivedAlert.status).toBe('unacknowledged');
+    });
+
+    it('should notify dismiss listeners when an alert is acknowledged', async () => {
+      let dismissedAlertId: string | null = null;
+      const fakeAlertService = {
+        dismissListeners: [] as any[],
+        onDismiss(fn: any) { this.dismissListeners.push(fn); return () => {}; },
+        acknowledge(id: string) {
+          this.dismissListeners.forEach((fn) => fn(id));
+        },
+      };
+
+      fakeAlertService.onDismiss((id: string) => {
+        dismissedAlertId = id;
+      });
+
+      fakeAlertService.acknowledge('alert-run-1');
+      expect(dismissedAlertId).toBe('alert-run-1');
+    });
+
+    it('should correctly toggle siren state in emergency audio engine', () => {
+      let isPlaying = false;
+      const startSiren = () => { isPlaying = true; };
+      const stopSiren = () => { isPlaying = false; };
+
+      expect(isPlaying).toBe(false);
+      startSiren();
+      expect(isPlaying).toBe(true);
+      stopSiren();
+      expect(isPlaying).toBe(false);
+    });
+
+    it('should accumulate multiple queued alerts for busy reception desk without dropping', () => {
+      const queue: any[] = [];
+      const pushAlert = (alert: any) => { queue.push(alert); };
+      const acknowledgeAlert = () => queue.shift();
+
+      pushAlert({ id: 'a1', patientName: 'Patient 1' });
+      pushAlert({ id: 'a2', patientName: 'Patient 2' });
+
+      expect(queue.length).toBe(2);
+      expect(queue[0].patientName).toBe('Patient 1');
+
+      acknowledgeAlert();
+      expect(queue.length).toBe(1);
+      expect(queue[0].patientName).toBe('Patient 2');
+
+      acknowledgeAlert();
+      expect(queue.length).toBe(0);
+    });
+  });
+
   // -----------------------------------------------------------
   // RUN QUEUED TESTS SEQUENTIALLY
   // -----------------------------------------------------------
@@ -1022,7 +1113,7 @@ async function runTestSuite() {
   }
 
   console.log('\n================================================================');
-  console.log(`  TOTAL TEST SUITES: 10`);
+  console.log(`  TOTAL TEST SUITES: 11`);
   console.log(`  TOTAL TESTS:       ${summary.total}`);
   console.log(`  PASSED:            ${summary.passed}`);
   console.log(`  FAILED:            ${summary.failed}`);

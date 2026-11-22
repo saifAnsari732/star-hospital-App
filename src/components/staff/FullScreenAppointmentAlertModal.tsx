@@ -8,59 +8,99 @@ import {
   Animated,
   StatusBar,
   ScrollView,
+  Platform,
 } from 'react-native';
 import {
-  BellRing,
   Volume2,
+  VolumeX,
   Calendar,
   Clock,
   User,
   Stethoscope,
-  MapPin,
   CheckCircle2,
   ArrowRight,
   ShieldAlert,
+  IndianRupee,
+  Layers,
 } from 'lucide-react-native';
 import type { ReceptionAppointmentAlert } from '../../services/firebaseAppointmentAlertService';
+import { emergencyAudioService } from '../../services/emergencyAudioService';
 
 export interface FullScreenAppointmentAlertModalProps {
   alert: ReceptionAppointmentAlert | null;
   visible: boolean;
   onAcknowledge: () => void;
   onNavigateToQueue?: () => void;
+  queueCount?: number;
 }
 
 export const FullScreenAppointmentAlertModal: React.FC<
   FullScreenAppointmentAlertModalProps
-> = ({ alert, visible, onAcknowledge, onNavigateToQueue }) => {
+> = ({ alert, visible, onAcknowledge, onNavigateToQueue, queueCount = 1 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const [pulseDirection, setPulseDirection] = useState<boolean>(true);
+  const bannerPulse = useRef(new Animated.Value(1)).current;
+  const [isAudioBlocked, setIsAudioBlocked] = useState<boolean>(
+    emergencyAudioService.isBlocked()
+  );
+
+  useEffect(() => {
+    const unsub = emergencyAudioService.onBlockedChange((blocked) => {
+      setIsAudioBlocked(blocked);
+    });
+    setIsAudioBlocked(emergencyAudioService.isBlocked());
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
 
+    // Beacon scale pulse animation
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.08,
-          duration: 400,
+          toValue: 1.1,
+          duration: 380,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 400,
+          duration: 380,
           useNativeDriver: true,
         }),
       ])
     );
     pulse.start();
 
+    // Banner pulse animation for blocked audio
+    const bPulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bannerPulse, {
+          toValue: 1.03,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bannerPulse, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    bPulse.start();
+
     return () => {
       pulse.stop();
+      bPulse.stop();
     };
-  }, [visible, pulseAnim]);
+  }, [visible, pulseAnim, bannerPulse]);
 
   if (!alert || !visible) return null;
+
+  const handleContainerTouch = () => {
+    if (isAudioBlocked) {
+      void emergencyAudioService.unlockAudio();
+    }
+  };
 
   return (
     <Modal
@@ -68,32 +108,70 @@ export const FullScreenAppointmentAlertModal: React.FC<
       transparent={false}
       animationType="slide"
       statusBarTranslucent
+      accessibilityRole="alert"
+      accessibilityLiveRegion="assertive"
     >
       <StatusBar barStyle="light-content" />
-      <View style={styles.container}>
+      <View
+        style={styles.container}
+        onTouchStart={handleContainerTouch}
+        {...(Platform.OS === 'web' ? ({ onClick: handleContainerTouch } as any) : {})}
+      >
         {/* Urgent Flashing Header */}
         <View style={styles.headerBanner}>
           <Animated.View
             style={[styles.beaconCircle, { transform: [{ scale: pulseAnim }] }]}
           >
-            <ShieldAlert size={34} color="#FFFFFF" />
+            <ShieldAlert size={36} color="#FFFFFF" />
           </Animated.View>
           <View style={styles.headerTextGroup}>
-            <Text style={styles.badgeLabel}>PRIORITY CLINICAL DISPATCH</Text>
+            <View style={styles.badgeRow}>
+              <Text style={styles.badgeLabel}>PRIORITY CLINICAL DISPATCH</Text>
+              {queueCount > 1 ? (
+                <View style={styles.queueBadge}>
+                  <Layers size={12} color="#FEF08A" />
+                  <Text style={styles.queueBadgeText}>+{queueCount - 1} QUEUED</Text>
+                </View>
+              ) : null}
+            </View>
             <Text style={styles.mainAlertTitle}>NEW APPOINTMENT BOOKED</Text>
             <Text style={styles.headerSubtitle}>
-              Live Firebase Realtime Sync • Attention: Reception & Triage Nurse
+              Live Firebase Realtime Sync • Front Desk & Triage Alert
             </Text>
           </View>
         </View>
 
-        {/* High Volume Sound Alert Indicator */}
-        <View style={styles.audioNoticeBar}>
-          <Volume2 size={18} color="#FEF08A" />
-          <Text style={styles.audioNoticeText}>
-            HIGH-VOLUME SIREN ACTIVE • SILENCE VIA ACTION BELOW
-          </Text>
-        </View>
+        {/* Audio Status Banner / Tap-To-Unmute Prompt */}
+        {isAudioBlocked ? (
+          <Animated.View
+            style={[
+              styles.audioBlockedBanner,
+              { transform: [{ scale: bannerPulse }] },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.unmuteButton}
+              onPress={() => {
+                void emergencyAudioService.unlockAudio();
+              }}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Sound loud medical siren"
+            >
+              <VolumeX size={18} color="#FFFFFF" />
+              <Text style={styles.audioBlockedText}>
+                ⚠️ AUDIO MUTED BY BROWSER — TAP HERE TO SOUND LOUD ALARM
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (
+          <View style={styles.audioNoticeBar}>
+            <Volume2 size={18} color="#FEF08A" />
+            <Text style={styles.audioNoticeText}>
+              HIGH-VOLUME SIREN ACTIVE • SILENCE VIA ACTION BELOW
+            </Text>
+          </View>
+        )}
 
         <ScrollView
           style={styles.contentScroll}
@@ -148,7 +226,7 @@ export const FullScreenAppointmentAlertModal: React.FC<
 
             <View style={styles.scheduleRow}>
               <View style={styles.scheduleItem}>
-                <Calendar size={18} color="#0866C6" />
+                <Calendar size={18} color="#38BDF8" />
                 <View>
                   <Text style={styles.scheduleLabel}>Date</Text>
                   <Text style={styles.scheduleValue}>{alert.date}</Text>
@@ -156,20 +234,31 @@ export const FullScreenAppointmentAlertModal: React.FC<
               </View>
 
               <View style={styles.scheduleItem}>
-                <Clock size={18} color="#D97706" />
+                <Clock size={18} color="#FBBF24" />
                 <View>
                   <Text style={styles.scheduleLabel}>Time Slot</Text>
                   <Text style={styles.scheduleValue}>{alert.timeSlot}</Text>
                 </View>
               </View>
             </View>
+
+            {alert.consultationFee !== undefined ? (
+              <View style={styles.feeRow}>
+                <View style={styles.feeBadge}>
+                  <IndianRupee size={14} color="#10B981" />
+                  <Text style={styles.feeText}>
+                    Consultation Fee: ₹{alert.consultationFee} (Paid)
+                  </Text>
+                </View>
+              </View>
+            ) : null}
           </View>
 
-          {/* Action Instructions */}
+          {/* Operational Instructions */}
           <View style={styles.instructionBox}>
             <Text style={styles.instructionText}>
-              Please verify patient records at the reception counter or check
-              them into the OPD Queue for vitals recording.
+              • Patient record is queued at the reception desk.{'\n'}
+              • Triage nurse can record vitals or issue an OPD token immediately.
             </Text>
           </View>
         </ScrollView>
@@ -196,7 +285,7 @@ export const FullScreenAppointmentAlertModal: React.FC<
               }}
               activeOpacity={0.88}
               accessibilityRole="button"
-              accessibilityLabel="View in OPD Queue"
+              accessibilityLabel="Open in OPD Queue"
             >
               <Text style={styles.openQueueButtonText}>
                 Open in OPD Queue
@@ -213,10 +302,10 @@ export const FullScreenAppointmentAlertModal: React.FC<
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0A0F1D',
   },
   headerBanner: {
-    backgroundColor: '#991B1B',
+    backgroundColor: '#7F1D1D',
     paddingTop: 52,
     paddingBottom: 20,
     paddingHorizontal: 20,
@@ -227,30 +316,51 @@ const styles = StyleSheet.create({
     borderBottomColor: '#EF4444',
   },
   beaconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     backgroundColor: '#DC2626',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 14,
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
     elevation: 8,
   },
   headerTextGroup: {
     flex: 1,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 3,
   },
   badgeLabel: {
     fontSize: 11,
     fontWeight: '800',
     color: '#FEF08A',
     letterSpacing: 0.8,
-    marginBottom: 2,
+  },
+  queueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(254, 240, 138, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FEF08A',
+  },
+  queueBadgeText: {
+    color: '#FEF08A',
+    fontSize: 10,
+    fontWeight: '800',
   },
   mainAlertTitle: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 0.3,
@@ -262,21 +372,40 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   audioNoticeBar: {
-    backgroundColor: '#7F1D1D',
+    backgroundColor: '#991B1B',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 8,
+    paddingVertical: 9,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#B91C1C',
+    borderBottomColor: '#DC2626',
   },
   audioNoticeText: {
     fontSize: 11.5,
     fontWeight: '800',
     color: '#FEF08A',
     letterSpacing: 0.5,
+  },
+  audioBlockedBanner: {
+    backgroundColor: '#B45309',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F59E0B',
+  },
+  unmuteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  audioBlockedText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
   },
   contentScroll: {
     flex: 1,
@@ -398,6 +527,26 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     marginTop: 1,
+  },
+  feeRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+  },
+  feeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  feeText: {
+    color: '#34D399',
+    fontSize: 12,
+    fontWeight: '700',
   },
   instructionBox: {
     backgroundColor: 'rgba(234, 179, 8, 0.12)',

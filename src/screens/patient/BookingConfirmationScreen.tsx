@@ -108,7 +108,10 @@ export const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps>
     try {
       const created = await appointmentService.bookAppointment({
         patientId: effectivePatientId,
+        patientName,
+        patientMrn,
         doctorId,
+        doctorName,
         date,
         startTime: time,
         mode,

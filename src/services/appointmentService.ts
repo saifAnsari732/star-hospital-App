@@ -110,9 +110,24 @@ export const appointmentService = {
       }
     );
 
-    // Live Firebase Cloud Firestore priority broadcast for Reception & Triage Nurses
+    // Live Firebase Cloud Firestore priority broadcast for Reception & Triage Nurses (<500ms)
     try {
-      void firebaseAppointmentAlertService.broadcastNewAppointmentAlert(createdAppointment);
+      const doc = mockDoctors.find((d) => d.id === req.doctorId) || mockDoctors[0];
+      const pat = mockPatients.find((p) => p.id === req.patientId) || mockPatients[0];
+
+      void firebaseAppointmentAlertService.broadcastNewAppointmentAlert({
+        ...createdAppointment,
+        patientName: createdAppointment.patientName || pat?.name || 'Walk-in Patient',
+        patientMrn: createdAppointment.patientMrn || pat?.mrn || 'P-00101',
+        patientPhone: createdAppointment.patientPhone || pat?.phone,
+        doctorId: createdAppointment.doctorId || req.doctorId,
+        doctorName: createdAppointment.doctorName || doc?.name || 'Dr. Amit Sharma',
+        doctorDepartment: createdAppointment.doctorDepartment || doc?.department || 'General OPD',
+        date: createdAppointment.date || req.date,
+        timeSlot: createdAppointment.timeSlot || req.timeSlot || req.startTime,
+        mode: createdAppointment.mode || req.mode || 'in_person',
+        consultationFee: createdAppointment.consultationFee ?? doc?.consultationFee ?? 500,
+      });
     } catch {
       // Non-blocking
     }

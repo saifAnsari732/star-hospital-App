@@ -35,6 +35,7 @@ import {
   Volume2,
 } from 'lucide-react-native';
 import { firebaseAppointmentAlertService } from '../../services/firebaseAppointmentAlertService';
+import { emergencyAudioService } from '../../services/emergencyAudioService';
 import { StarLoader } from '../../components/common';
 import { StaffKpiCard } from '../../components/staff/StaffKpiCard';
 import { DesignationBadge } from '../../components/staff/DesignationBadge';
@@ -101,6 +102,7 @@ export const StaffDashboardScreen: React.FC<{ navigation: any }> = ({
   const [roleStatusBanner, setRoleStatusBanner] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
+    void emergencyAudioService.unlockAudio();
     setError(null);
     try {
       const [metrics, allTasks, notifs, registry] = await Promise.all([
@@ -922,6 +924,7 @@ export const StaffDashboardScreen: React.FC<{ navigation: any }> = ({
           <TouchableOpacity
             style={styles.testSirenBtn}
             onPress={() => {
+              void emergencyAudioService.unlockAudio();
               firebaseAppointmentAlertService.triggerTestAlert();
             }}
             activeOpacity={0.8}

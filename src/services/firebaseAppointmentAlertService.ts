@@ -1,12 +1,11 @@
 import {
   collection,
-  addDoc,
+  doc,
+  setDoc,
+  updateDoc,
   onSnapshot,
   query,
   where,
-  orderBy,
-  updateDoc,
-  doc,
   serverTimestamp,
   limit,
 } from 'firebase/firestore';
@@ -36,40 +35,55 @@ export interface ReceptionAppointmentAlert {
 }
 
 type AlertListener = (alert: ReceptionAppointmentAlert) => void;
+type DismissListener = (alertId: string) => void;
+
+const STALE_ALERT_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
 class FirebaseAppointmentAlertService {
   private localListeners: Set<AlertListener> = new Set();
+  private dismissListeners: Set<DismissListener> = new Set();
   private firestoreUnsubscribe: (() => void) | null = null;
   private recentAlertIds: Set<string> = new Set();
+  private isInitialized: boolean = false;
 
   constructor() {
-    this.initFirestoreListener();
+    this.ensureFirestoreListener();
   }
 
   /**
-   * Initializes real-time listener on Firebase Firestore 'hospital_reception_alerts'
+   * Initializes real-time listener on Firebase Cloud Firestore 'hospital_reception_alerts'
    */
-  private initFirestoreListener(): void {
-    if (!isFirebaseConfigured || !firestoreDb) return;
+  ensureFirestoreListener(): void {
+    if (this.firestoreUnsubscribe || !isFirebaseConfigured || !firestoreDb) return;
 
     try {
       const alertsRef = collection(firestoreDb, 'hospital_reception_alerts');
+      // Simple equality filter: ultra-fast, no composite index needed
       const q = query(
         alertsRef,
         where('status', '==', 'unacknowledged'),
-        limit(10)
+        limit(15)
       );
 
       this.firestoreUnsubscribe = onSnapshot(
         q,
         (snapshot) => {
           snapshot.docChanges().forEach((change) => {
-            if (change.type === 'added') {
-              const data = change.doc.data();
-              const alertId = change.doc.id;
+            const data = change.doc.data();
+            const alertId = change.doc.id;
 
+            if (change.type === 'added') {
               if (this.recentAlertIds.has(alertId)) return;
               this.recentAlertIds.add(alertId);
+
+              // Filter out stale alerts older than 15 minutes from previous sessions
+              const createdAtMillis =
+                data.createdAt?.toMillis?.() ||
+                (data.createdAt ? Date.parse(data.createdAt) : Date.now());
+
+              if (Date.now() - createdAtMillis > STALE_ALERT_THRESHOLD_MS) {
+                return;
+              }
 
               const alert: ReceptionAppointmentAlert = {
                 id: alertId,
@@ -88,29 +102,48 @@ class FirebaseAppointmentAlertService {
                 mode: data.mode || 'in_person',
                 consultationFee: data.consultationFee,
                 status: 'unacknowledged',
-                createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+                createdAt:
+                  data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
               };
 
               this.notifyLocalListeners(alert);
+            } else if (change.type === 'removed' || change.type === 'modified') {
+              // Alert was acknowledged by another nurse / desk staff
+              if (data.status === 'acknowledged' || change.type === 'removed') {
+                this.notifyDismissListeners(alertId);
+              }
             }
           });
         },
         () => {
-          // Fallback gracefully on firestore connection drops
+          // Graceful handling of network drops or offline transitions
         }
       );
+      this.isInitialized = true;
     } catch {
-      // Ignore initial Firestore setup errors
+      // Safe fallback
     }
   }
 
   /**
-   * Subscribe nurse or receptionist phone to real-time appointment alerts
+   * Subscribe reception nurse phone to real-time appointment alerts.
+   * Returns an unsubscribe teardown function.
    */
   subscribe(listener: AlertListener): () => void {
+    this.ensureFirestoreListener();
     this.localListeners.add(listener);
     return () => {
       this.localListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Subscribe to alert dismissals (when acknowledged remotely by another nurse)
+   */
+  onDismiss(listener: DismissListener): () => void {
+    this.dismissListeners.add(listener);
+    return () => {
+      this.dismissListeners.delete(listener);
     };
   }
 
@@ -124,16 +157,24 @@ class FirebaseAppointmentAlertService {
     });
   }
 
+  private notifyDismissListeners(alertId: string): void {
+    this.dismissListeners.forEach((listener) => {
+      try {
+        listener(alertId);
+      } catch {
+        // Safe listener execution
+      }
+    });
+  }
+
   /**
-   * Broadcasts a new patient appointment booking to Reception & Nurse devices via Firebase Firestore
+   * Broadcasts a new patient appointment booking to Reception & Nurse devices via Cloud Firestore
    */
   async broadcastNewAppointmentAlert(
     appointment: Partial<Appointment>
   ): Promise<ReceptionAppointmentAlert> {
-    const alertId = `alert-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
     const alertData: ReceptionAppointmentAlert = {
-      id: alertId,
+      id: `alert-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       type: 'NEW_APPOINTMENT_BOOKED',
       priority: 'urgent',
       appointmentId: appointment.id || `apt-${Date.now()}`,
@@ -152,22 +193,27 @@ class FirebaseAppointmentAlertService {
       createdAt: new Date().toISOString(),
     };
 
-    // 1. Write to real Firebase Firestore if available
+    // 1. Live Cloud Firestore write
     if (isFirebaseConfigured && firestoreDb) {
       try {
         const alertsRef = collection(firestoreDb, 'hospital_reception_alerts');
-        const docRef = await addDoc(alertsRef, {
+        const alertDocRef = doc(alertsRef);
+        alertData.id = alertDocRef.id;
+
+        // Add to recent set BEFORE network write to prevent duplicate on local listener
+        this.recentAlertIds.add(alertDocRef.id);
+
+        await setDoc(alertDocRef, {
           ...alertData,
           createdAt: serverTimestamp(),
           targetRoles: ['staff', 'nurse', 'receptionist', 'admin'],
         });
-        alertData.id = docRef.id;
       } catch {
-        // Fallback: Continue local delivery
+        // Fallback: If network drops, local delivery proceeds
       }
     }
 
-    // 2. Deliver immediately to active listeners on this phone / session
+    // 2. Immediate local notification for testing or single-device workflows
     this.recentAlertIds.add(alertData.id);
     this.notifyLocalListeners(alertData);
 
@@ -187,7 +233,7 @@ class FirebaseAppointmentAlertService {
           acknowledgedAt: serverTimestamp(),
         });
       } catch {
-        // Ignore
+        // Safe ignore
       }
     }
   }

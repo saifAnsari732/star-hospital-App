@@ -259,31 +259,61 @@ export const StaffNavigator: React.FC = () => {
   const stackBottomPad = Math.max(insets.bottom, 14);
   const navigation = useNavigation<any>();
 
-  // Full-screen Real-time Firebase Appointment Alert State
-  const [activeAlert, setActiveAlert] = useState<ReceptionAppointmentAlert | null>(null);
-  const [isAlertVisible, setIsAlertVisible] = useState<boolean>(false);
+  // Full-screen Real-time Firebase Appointment Alert Queue
+  const [alertQueue, setAlertQueue] = useState<ReceptionAppointmentAlert[]>([]);
+  const currentAlert = alertQueue[0] || null;
+  const isAlertVisible = alertQueue.length > 0;
 
   useEffect(() => {
-    // Subscribe reception nurse phone to live Firebase Firestore appointment alerts
-    const unsubscribe = firebaseAppointmentAlertService.subscribe((alert) => {
-      setActiveAlert(alert);
-      setIsAlertVisible(true);
+    // Proactively unlock audio pipeline on mount
+    void emergencyAudioService.unlockAudio();
+
+    // 1. Subscribe reception nurse phone to live Firebase Firestore appointment alerts (<500ms)
+    const unsubAlerts = firebaseAppointmentAlertService.subscribe((newAlert) => {
+      setAlertQueue((prev) => {
+        // Prevent duplicate alerts in queue
+        if (prev.some((a) => a.id === newAlert.id)) return prev;
+        return [...prev, newAlert];
+      });
       emergencyAudioService.startSiren();
     });
 
+    // 2. Listen to remote acknowledgments from other desk staff/nurses
+    const unsubDismiss = firebaseAppointmentAlertService.onDismiss((dismissedId) => {
+      setAlertQueue((prev) => {
+        const remaining = prev.filter((a) => a.id !== dismissedId);
+        if (remaining.length === 0) {
+          emergencyAudioService.stopSiren();
+        }
+        return remaining;
+      });
+    });
+
     return () => {
-      unsubscribe();
+      unsubAlerts();
+      unsubDismiss();
       emergencyAudioService.stopSiren();
     };
   }, []);
 
   const handleAcknowledge = useCallback(() => {
-    emergencyAudioService.stopSiren();
-    setIsAlertVisible(false);
-    if (activeAlert?.id) {
-      void firebaseAppointmentAlertService.acknowledgeAlert(activeAlert.id);
+    if (!currentAlert) return;
+    const alertId = currentAlert.id;
+
+    // Pop the acknowledged alert from the front of the queue
+    setAlertQueue((prev) => {
+      const remaining = prev.slice(1);
+      if (remaining.length === 0) {
+        emergencyAudioService.stopSiren();
+      }
+      return remaining;
+    });
+
+    // Persist acknowledgment to Cloud Firestore for other staff devices
+    if (alertId) {
+      void firebaseAppointmentAlertService.acknowledgeAlert(alertId);
     }
-  }, [activeAlert]);
+  }, [currentAlert]);
 
   const handleNavigateToQueue = useCallback(() => {
     handleAcknowledge();
@@ -356,10 +386,11 @@ export const StaffNavigator: React.FC = () => {
 
       {/* Full-screen Loud Audio Alert for Reception & Triage Nurses */}
       <FullScreenAppointmentAlertModal
-        alert={activeAlert}
+        alert={currentAlert}
         visible={isAlertVisible}
         onAcknowledge={handleAcknowledge}
         onNavigateToQueue={handleNavigateToQueue}
+        queueCount={alertQueue.length}
       />
     </View>
   );

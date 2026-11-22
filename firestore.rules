@@ -606,5 +606,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update, delete: if false;
     }
+
+    // -------------------------------------------------------------------------
+    // 7. hospital_reception_alerts/{alertId} — Live Reception & Nurse Alarm Feed
+    // -------------------------------------------------------------------------
+    match /hospital_reception_alerts/{alertId} {
+      allow read, write: if true;
+    }
   }
 }

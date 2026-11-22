@@ -47,7 +47,12 @@ export type AppointmentItem = Appointment;
 
 export interface BookAppointmentRequest {
   patientId: string;
+  patientName?: string;
+  patientMrn?: string;
+  patientPhone?: string;
   doctorId: string;
+  doctorName?: string;
+  doctorDepartment?: string;
   date: string; // YYYY-MM-DD
   startTime: string; // e.g. "10:30" or "10:30 AM"
   timeSlot?: string;
