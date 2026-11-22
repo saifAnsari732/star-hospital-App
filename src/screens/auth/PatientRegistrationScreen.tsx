@@ -23,6 +23,8 @@ import {
   Phone,
   Mail,
   Lock,
+  Eye,
+  EyeOff,
   Calendar,
   Users,
   MapPin,
@@ -40,6 +42,7 @@ export const PatientRegistrationScreen: React.FC = () => {
   const [mobileNumber, setMobileNumber] = useState<string>('');
   const [emailAddress, setEmailAddress] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [dateOfBirth, setDateOfBirth] = useState<string>('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
   const [address, setAddress] = useState<string>('');
@@ -63,6 +66,10 @@ export const PatientRegistrationScreen: React.FC = () => {
     }
     if (!emailAddress.trim() || !emailAddress.includes('@')) {
       setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+    if (!password.trim() || password.length < 6) {
+      setErrorMessage('Please enter a password with at least 6 characters.');
       return;
     }
     if (!dateOfBirth.trim()) {
@@ -202,14 +209,27 @@ export const PatientRegistrationScreen: React.FC = () => {
                 <Lock size={20} color="#64748B" />
               </View>
               <TextInput
-                style={styles.textInput}
-                placeholder="Password"
+                style={[styles.textInput, { flex: 1 }]}
+                placeholder="Password (min. 6 characters)"
                 placeholderTextColor="#94A3B8"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
+              <TouchableOpacity
+                style={styles.eyeIconButton}
+                onPress={() => setShowPassword((prev) => !prev)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? (
+                  <EyeOff size={20} color="#64748B" />
+                ) : (
+                  <Eye size={20} color="#64748B" />
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* 5. Date of Birth */}
@@ -419,6 +439,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  eyeIconButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,

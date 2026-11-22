@@ -78,6 +78,10 @@ export const firebaseAnalyticsService = {
     await this.trackEvent('login', { method, account_role: role });
   },
 
+  async trackSignUpSuccess(role: UserRole, method: string): Promise<void> {
+    await this.trackEvent('sign_up', { method, account_role: role });
+  },
+
   async trackAppointmentBooked(department: string): Promise<void> {
     await this.trackEvent('appointment_booked', { department });
   },

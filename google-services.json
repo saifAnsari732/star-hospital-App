@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "374748056859",
+    "project_id": "star-f3312",
+    "storage_bucket": "star-f3312.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:374748056859:android:12d23342742ac58775d7be",
+        "android_client_info": {
+          "package_name": "com.starhospital.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXD8rhycowNlzCmnqiFiz6Ue6lf3K9_70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -364,7 +364,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { login: identifier, password, role: explicitRole, designation: explicitDesignation } = credentials;
 
     if (!identifier || identifier.trim().length === 0) {
-      throw new Error('Email address or Role ID is required.');
+      throw new Error('Email address, Mobile Number, or Role ID is required.');
     }
 
     if (typeof password !== 'string' || password.trim().length === 0) {
@@ -380,78 +380,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw new Error('Invalid user role specified.');
     }
 
-    if (!isMockFallbackEnabled) {
-      const authResponse = await authService.login({
-        ...credentials,
-        role: selectedRole,
-        designation: resolvedDesignation,
-      });
-      const verifiedRole = authResponse.user?.role;
-      if (!authResponse.user || !isValidUserRole(verifiedRole)) {
-        throw new Error('Authentication response did not contain a valid user role.');
-      }
-      if (explicitRole && verifiedRole !== explicitRole) {
-        throw new Error(
-          `Your verified account role (${verifiedRole}) cannot access the ${explicitRole} portal.`
-        );
-      }
-      await persistSession(authResponse.user, verifiedRole, authResponse.token);
-      void firebaseAnalyticsService.trackLoginSuccess(verifiedRole, 'password');
-      return;
+    const authResponse = await authService.login({
+      ...credentials,
+      role: selectedRole,
+      designation: resolvedDesignation,
+    });
+
+    const verifiedUser = authResponse.user;
+    const verifiedRole = verifiedUser?.role;
+    if (!verifiedUser || !isValidUserRole(verifiedRole)) {
+      throw new Error('Authentication response did not contain a valid user role.');
+    }
+    if (explicitRole && verifiedRole !== explicitRole) {
+      throw new Error(
+        `Your verified account role (${verifiedRole}) cannot access the ${explicitRole} portal.`
+      );
     }
 
-    let authenticatedUser: User;
-    const generatedToken = `star_jwt_${selectedRole}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-
-    if (selectedRole === 'patient') {
-      const isEmail = identifier.includes('@');
-      authenticatedUser = {
-        id: 'pat-1001',
-        name: 'Rahul Sharma',
-        email: isEmail ? identifier.trim() : 'rahul@gmail.com',
-        phone: '+91 98765 43210',
-        role: 'patient',
-        gender: 'male',
-        dateOfBirth: '1992-08-15',
-        bloodGroup: 'B+',
-        city: 'Mumbai',
-        address: 'B-402, Greenfield Heights, Andheri East',
-        token: generatedToken,
-        createdAt: new Date().toISOString(),
-      };
-    } else if (selectedRole === 'doctor') {
-      authenticatedUser = {
-        id: 'doc-1',
-        name: 'Dr. Amit Sharma',
-        email: identifier.includes('@') ? identifier.trim() : 'dr.amit@starhospital.com',
-        phone: '+91 98111 22334',
-        role: 'doctor',
-        token: generatedToken,
-        gender: 'male',
-        city: 'Mumbai',
-        createdAt: new Date().toISOString(),
-      };
-    } else {
-      const staffDesignation =
-        resolvedDesignation && VALID_DESIGNATIONS.includes(resolvedDesignation)
-          ? resolvedDesignation
-          : 'admin';
-      authenticatedUser = {
-        id: 'stf-3001',
-        name: 'Sunita Verma',
-        email: identifier.includes('@') ? identifier.trim() : 'staff@starhospital.com',
-        phone: '+91 98222 33445',
-        role: 'staff',
-        designation: staffDesignation,
-        token: generatedToken,
-        gender: 'female',
-        city: 'Mumbai',
-        createdAt: new Date().toISOString(),
-      };
-    }
-
-    await persistSession(authenticatedUser, selectedRole, generatedToken);
-    void firebaseAnalyticsService.trackLoginSuccess(selectedRole, 'password');
+    await persistSession(verifiedUser, verifiedRole, authResponse.token);
+    void firebaseAnalyticsService.trackLoginSuccess(verifiedRole, 'password');
   };
 
   const loginWithOtp = async (phone: string, otp: string, selectedRole: UserRole): Promise<void> => {
@@ -543,37 +490,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error(emailCheck.error || 'Please enter a valid email address.');
       }
     }
-
-    if (!isMockFallbackEnabled) {
-      const authResponse = await authService.registerPatient(data);
-      if (!authResponse.user || authResponse.user.role !== 'patient') {
-        throw new Error('Patient registration must return a verified patient account.');
-      }
-      await persistSession(authResponse.user, 'patient', authResponse.token);
-      return;
+    if (!data.password || data.password.trim().length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
     }
 
-    const token = `star_reg_jwt_${Date.now()}`;
-    const cleanEmail =
-      data.email?.trim() || `${data.phone.replace(/\D/g, '')}@patient.starhospital.com`;
-    const registeredUser: User = {
-      id: `pat-${Date.now()}`,
-      name: data.name.trim(),
-      email: cleanEmail,
-      phone: data.phone.trim(),
-      role: 'patient',
-      gender: data.gender,
-      dateOfBirth: data.dateOfBirth,
-      bloodGroup: data.bloodGroup,
-      address: data.address,
-      city: data.city || 'Mumbai',
-      token,
-      createdAt: new Date().toISOString(),
-    };
-
-    // By default every new signup is registered with role = 'patient'; Admin can later change their role
-    await assignUserRoleByAdmin(cleanEmail, data.name.trim(), 'patient');
-    await persistSession(registeredUser, 'patient', token);
+    const authResponse = await authService.registerPatient(data);
+    if (!authResponse.user || authResponse.user.role !== 'patient') {
+      throw new Error('Patient registration must return a verified patient account.');
+    }
+    await persistSession(authResponse.user, 'patient', authResponse.token);
+    void firebaseAnalyticsService.trackSignUpSuccess('patient', 'email_or_phone');
   };
 
   const logout = async (): Promise<void> => {

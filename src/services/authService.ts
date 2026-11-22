@@ -22,6 +22,70 @@ import { mockStaff } from '../fixtures/mockStaff';
 
 const VALID_USER_ROLES: readonly UserRole[] = ['patient', 'doctor', 'staff'];
 export const ADMIN_ROLE_REGISTRY_STORAGE_KEY = '@star_hospital_admin_role_registry_v1';
+export const REGISTERED_ACCOUNTS_STORAGE_KEY = '@star_hospital_registered_accounts_v2';
+
+export interface RegisteredAccountItem {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  password?: string;
+  role: UserRole;
+  designation?: StaffDesignation;
+  gender?: 'male' | 'female' | 'other';
+  dateOfBirth?: string;
+  bloodGroup?: string;
+  address?: string;
+  city?: string;
+  createdAt: string;
+}
+
+let inMemoryRegisteredAccounts: RegisteredAccountItem[] = [];
+
+export const getRegisteredAccounts = async (): Promise<RegisteredAccountItem[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(REGISTERED_ACCOUNTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        inMemoryRegisteredAccounts = parsed;
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return inMemoryRegisteredAccounts;
+};
+
+export const saveRegisteredAccount = async (account: RegisteredAccountItem): Promise<void> => {
+  await getRegisteredAccounts();
+  const normEmail = (account.email || '').trim().toLowerCase();
+  const normPhone = (account.phone || '').replace(/\D/g, '');
+  const normId = (account.id || '').trim().toLowerCase();
+
+  const existingIdx = inMemoryRegisteredAccounts.findIndex((a) => {
+    if (normEmail && a.email.toLowerCase() === normEmail) return true;
+    if (normPhone.length >= 10 && a.phone.replace(/\D/g, '') === normPhone) return true;
+    if (normId && a.id.toLowerCase() === normId) return true;
+    return false;
+  });
+
+  if (existingIdx >= 0) {
+    inMemoryRegisteredAccounts[existingIdx] = account;
+  } else {
+    inMemoryRegisteredAccounts = [account, ...inMemoryRegisteredAccounts];
+  }
+
+  try {
+    await AsyncStorage.setItem(
+      REGISTERED_ACCOUNTS_STORAGE_KEY,
+      JSON.stringify(inMemoryRegisteredAccounts)
+    );
+  } catch {
+    // ignore
+  }
+};
 
 export interface AdminManagedAccount {
   id: string;
@@ -264,55 +328,86 @@ export const authService = {
           throw new Error('Login identifier and password are required.');
         }
 
-        const resolved = resolveIdentityFromLoginId(
-          credentials.login,
-          credentials.role,
-          credentials.designation
-        );
+        const rawLogin = credentials.login.trim();
+        const normLogin = rawLogin.toLowerCase();
+        const normDigits = rawLogin.replace(/\D/g, '');
+        const accounts = await getRegisteredAccounts();
+
+        const matchedAccount = accounts.find((acc) => {
+          if (acc.email && acc.email.toLowerCase() === normLogin) return true;
+          if (acc.id && acc.id.toLowerCase() === normLogin) return true;
+          if (normDigits.length >= 10 && acc.phone && acc.phone.replace(/\D/g, '') === normDigits) return true;
+          return false;
+        });
+
         let user: User;
 
-        if (resolved.role === 'doctor') {
-          const doc = mockDoctors[0]; // Dr. Amit Sharma
+        if (matchedAccount) {
+          if (matchedAccount.password && matchedAccount.password !== credentials.password?.trim()) {
+            throw new Error('Incorrect password. Please verify and try again.');
+          }
           user = {
-            id: doc.id,
-            name: doc.name,
-            email: doc.email || 'amit.sharma@starhospital.com',
-            phone: doc.phone || '+92 300 5551122',
-            role: 'doctor',
-            avatarUrl: doc.photoUrl,
-            token: 'mock-doctor-jwt-token-12345',
-          };
-        } else if (resolved.role === 'staff') {
-          const designation = credentials.designation || resolved.designation || 'nurse';
-          const staffMember =
-            mockStaff.find((s) => s.designation === designation) || mockStaff[0];
-          user = {
-            id: staffMember.id,
-            name: staffMember.name,
-            email: staffMember.email,
-            phone: staffMember.phone,
-            role: 'staff',
-            designation: staffMember.designation,
-            avatarUrl: staffMember.photoUrl,
-            token: 'mock-staff-jwt-token-67890',
+            id: matchedAccount.id,
+            name: matchedAccount.name,
+            email: matchedAccount.email,
+            phone: matchedAccount.phone,
+            role: matchedAccount.role || 'patient',
+            gender: matchedAccount.gender || 'male',
+            dateOfBirth: matchedAccount.dateOfBirth,
+            bloodGroup: (matchedAccount.bloodGroup as any) || 'B+',
+            city: matchedAccount.city || 'Mumbai',
+            address: matchedAccount.address || 'Mumbai',
+            token: `star_jwt_${matchedAccount.role}_${Date.now()}`,
           };
         } else {
-          // Default: Patient (Ali Khan)
-          const pat = mockPatients[0];
-          user = {
-            id: pat.id,
-            name: pat.name,
-            email: pat.email,
-            phone: pat.phone,
-            role: 'patient',
-            avatarUrl: pat.photoUrl,
-            bloodGroup: pat.bloodGroup,
-            city: pat.city,
-            address: pat.address,
-            gender: pat.gender,
-            dateOfBirth: pat.birthDate,
-            token: 'mock-patient-jwt-token-54321',
-          };
+          const resolved = resolveIdentityFromLoginId(
+            credentials.login,
+            credentials.role,
+            credentials.designation
+          );
+
+          if (resolved.role === 'doctor') {
+            const doc = mockDoctors[0]; // Dr. Amit Sharma
+            user = {
+              id: doc.id,
+              name: doc.name,
+              email: doc.email || 'amit.sharma@starhospital.com',
+              phone: doc.phone || '+92 300 5551122',
+              role: 'doctor',
+              avatarUrl: doc.photoUrl,
+              token: `star_mock_jwt_doctor_${Date.now()}`,
+            };
+          } else if (resolved.role === 'staff') {
+            const designation = credentials.designation || resolved.designation || 'nurse';
+            const staffMember =
+              mockStaff.find((s) => s.designation === designation) || mockStaff[0];
+            user = {
+              id: staffMember.id,
+              name: staffMember.name,
+              email: staffMember.email,
+              phone: staffMember.phone,
+              role: 'staff',
+              designation: staffMember.designation,
+              avatarUrl: staffMember.photoUrl,
+              token: `star_mock_jwt_staff_${Date.now()}`,
+            };
+          } else {
+            // Default: Patient
+            const isEmail = credentials.login.includes('@');
+            user = {
+              id: 'PAT-1001',
+              name: isEmail ? credentials.login.split('@')[0] : 'Patient User',
+              email: isEmail ? credentials.login : 'rahul@gmail.com',
+              phone: normDigits.length >= 10 ? credentials.login : '+91 98765 43210',
+              role: 'patient',
+              bloodGroup: 'B+',
+              city: 'Mumbai',
+              address: 'Mumbai',
+              gender: 'male',
+              dateOfBirth: '1995-01-01',
+              token: `star_mock_jwt_patient_${Date.now()}`,
+            };
+          }
         }
 
         const authResponse: AuthResponse = {
@@ -435,12 +530,16 @@ export const authService = {
     return withMockFallback(
       () => apiClient.post<AuthResponse>('/api/v1/auth/register', data),
       async () => {
-        const regToken = `mock-patient-jwt-token-reg-${Date.now()}`;
+        const regToken = `star_reg_jwt_patient_${Date.now()}`;
+        const generatedId = `PAT-${Math.floor(1000 + Math.random() * 9000)}`;
+        const cleanEmail =
+          data.email?.trim() || `${data.phone.replace(/\D/g, '')}@patient.starhospital.com`;
+
         const newUser: User = {
-          id: `pat-${Date.now()}`,
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
+          id: generatedId,
+          name: data.name.trim(),
+          email: cleanEmail,
+          phone: data.phone.trim(),
           role: 'patient',
           gender: data.gender,
           dateOfBirth: data.dateOfBirth,
@@ -449,6 +548,23 @@ export const authService = {
           city: data.city,
           token: regToken,
         };
+
+        await saveRegisteredAccount({
+          id: generatedId,
+          name: data.name.trim(),
+          email: cleanEmail,
+          phone: data.phone.trim(),
+          password: data.password?.trim(),
+          role: 'patient',
+          gender: data.gender,
+          dateOfBirth: data.dateOfBirth,
+          bloodGroup: data.bloodGroup,
+          address: data.address,
+          city: data.city,
+          createdAt: new Date().toISOString(),
+        });
+
+        await assignUserRoleByAdmin(cleanEmail, data.name.trim(), 'patient');
 
         const authResponse: AuthResponse = {
           token: regToken,

@@ -78,7 +78,7 @@ export const LoginScreen: React.FC = () => {
     const activePassword = overridePassword ?? password;
 
     if (!activeIdentifier) {
-      setErrorMessage('Please enter your Email Address or Role ID (e.g. PAT-1001, DOC-2001, STF-3001).');
+      setErrorMessage('Please enter your Mobile Number, Email Address, or Role ID.');
       return;
     }
 
@@ -97,7 +97,7 @@ export const LoginScreen: React.FC = () => {
         designation: resolved.designation,
       });
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please check your Email/Role ID and password.');
+      setErrorMessage(err.message || 'Authentication failed. Please verify your Mobile/Email and password.');
     } finally {
       setIsSubmitting(false);
     }
@@ -140,7 +140,7 @@ export const LoginScreen: React.FC = () => {
           <View style={styles.loginCard}>
             <Text style={styles.loginTitle}>Login</Text>
             <Text style={styles.loginSubtitle}>
-              Unified Portal • Sign in with your Role ID or Email &amp; Password
+              Unified Portal • Sign in with Phone, Email, or Role ID &amp; Password
             </Text>
 
             {/* Auto-Detected Role Indicator Badge */}
@@ -165,14 +165,14 @@ export const LoginScreen: React.FC = () => {
               </View>
             ) : null}
 
-            {/* Unified Email / Role ID Field */}
+            {/* Unified Email / Phone / Role ID Field */}
             <View style={styles.inputWrapper}>
               <View style={styles.inputIconContainer}>
                 <Mail size={20} color="#64748B" />
               </View>
               <TextInput
                 style={styles.textInput}
-                placeholder="Email or Role ID (PAT-1001 / DOC-2001 / STF-3001)"
+                placeholder="Phone, Email, or Role ID (e.g. 9876543210 / saif@me.com)"
                 placeholderTextColor="#94A3B8"
                 value={identifier}
                 onChangeText={(text) => {
