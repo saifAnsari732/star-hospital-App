@@ -1,5 +1,6 @@
 import apiClient, { withMockFallback } from './apiClient';
 import { firebaseAppointmentAlertService } from './firebaseAppointmentAlertService';
+import { firebaseRealtimeDbService } from './firebaseRealtimeDbService';
 import {
   Appointment,
   BookAppointmentRequest,
@@ -110,6 +111,9 @@ export const appointmentService = {
       }
     );
 
+    // Persist to Cloud Firestore Real-Time DB
+    void firebaseRealtimeDbService.saveAppointment(createdAppointment);
+
     // Live Firebase Cloud Firestore priority broadcast for Reception & Triage Nurses (<500ms)
     try {
       const doc = mockDoctors.find((d) => d.id === req.doctorId) || mockDoctors[0];
@@ -141,7 +145,7 @@ export const appointmentService = {
   async rescheduleAppointment(
     req: RescheduleAppointmentRequest
   ): Promise<Appointment> {
-    return withMockFallback(
+    const updated = await withMockFallback(
       () =>
         apiClient.put<Appointment>(
           `/api/v1/appointments/${req.appointmentId}/reschedule`,
@@ -157,6 +161,8 @@ export const appointmentService = {
         return { ...appt };
       }
     );
+    void firebaseRealtimeDbService.saveAppointment(updated);
+    return updated;
   },
 
   /**
@@ -166,7 +172,7 @@ export const appointmentService = {
     appointmentId: string,
     reason?: string
   ): Promise<{ success: boolean; message: string }> {
-    return withMockFallback(
+    const result = await withMockFallback(
       () =>
         apiClient.delete<{ success: boolean; message: string }>(
           `/api/v1/appointments/${appointmentId}`,
@@ -183,13 +189,18 @@ export const appointmentService = {
         };
       }
     );
+    const appt = mockAppointments.find((a) => a.id === appointmentId);
+    if (appt) {
+      void firebaseRealtimeDbService.saveAppointment(appt);
+    }
+    return result;
   },
 
   /**
    * Record patient vital signs (by Nurse or Doctor)
    */
   async updateVitals(req: UpdateVitalsRequest): Promise<Appointment> {
-    return withMockFallback(
+    const updated = await withMockFallback(
       () =>
         apiClient.put<Appointment>(
           `/api/v1/appointments/${req.appointmentId}/vitals`,
@@ -207,13 +218,15 @@ export const appointmentService = {
         return { ...appt };
       }
     );
+    void firebaseRealtimeDbService.saveAppointment(updated);
+    return updated;
   },
 
   /**
    * Check in patient upon arrival at hospital
    */
   async checkInAppointment(appointmentId: string): Promise<Appointment> {
-    return withMockFallback(
+    const updated = await withMockFallback(
       () =>
         apiClient.post<Appointment>(
           `/api/v1/appointments/${appointmentId}/check-in`
@@ -226,6 +239,8 @@ export const appointmentService = {
         return { ...appt };
       }
     );
+    void firebaseRealtimeDbService.saveAppointment(updated);
+    return updated;
   },
 };
 

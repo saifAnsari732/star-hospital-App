@@ -1,4 +1,5 @@
 import apiClient, { withMockFallback } from './apiClient';
+import { firebaseRealtimeDbService } from './firebaseRealtimeDbService';
 import {
   OPDToken,
   DoctorQueueView,
@@ -62,6 +63,7 @@ export const opdTokenService = {
         };
 
         mockOpdTokens.push(newToken);
+        void firebaseRealtimeDbService.saveOpdToken(newToken);
         return newToken;
       }
     );
@@ -140,6 +142,7 @@ export const opdTokenService = {
         if (currentServing) {
           currentServing.status = 'completed';
           currentServing.completedAt = new Date().toISOString();
+          void firebaseRealtimeDbService.saveOpdToken(currentServing);
         }
 
         // Find next waiting token
@@ -163,8 +166,10 @@ export const opdTokenService = {
               t.queuePosition = pos;
               t.estimatedWaitMinutes = pos * 15;
               pos++;
+              void firebaseRealtimeDbService.saveOpdToken(t);
             });
 
+          void firebaseRealtimeDbService.saveOpdToken(nextWaiting);
           return nextWaiting;
         }
 
@@ -185,6 +190,7 @@ export const opdTokenService = {
         if (token) {
           token.status = 'completed';
           token.completedAt = new Date().toISOString();
+          void firebaseRealtimeDbService.saveOpdToken(token);
         }
       }
     );

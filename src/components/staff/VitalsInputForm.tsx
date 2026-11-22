@@ -46,39 +46,41 @@ export const VitalsInputForm: React.FC<VitalsInputFormProps> = ({
 
   const initialBp = parseBp(initialVitals?.bloodPressure);
 
-  const [systolic, setSystolic] = useState(initialBp.systolic);
-  const [diastolic, setDiastolic] = useState(initialBp.diastolic);
+  const [systolic, setSystolic] = useState(initialBp.systolic || '120');
+  const [diastolic, setDiastolic] = useState(initialBp.diastolic || '80');
   const [pulse, setPulse] = useState(
-    initialVitals?.pulse?.replace(/[^0-9.]/g, '') || ''
+    initialVitals?.pulse?.replace(/[^0-9.]/g, '') || '72'
   );
   const [temperature, setTemperature] = useState(
-    initialVitals?.temperature?.replace(/[^0-9.]/g, '') || ''
+    initialVitals?.temperature?.replace(/[^0-9.]/g, '') || '98.6'
   );
   const [weight, setWeight] = useState(
-    initialVitals?.weight?.replace(/[^0-9.]/g, '') || ''
+    initialVitals?.weight?.replace(/[^0-9.]/g, '') || '68'
   );
   const [oxygenSaturation, setOxygenSaturation] = useState(
-    initialVitals?.oxygenSaturation?.replace(/[^0-9.]/g, '') || ''
+    initialVitals?.oxygenSaturation?.replace(/[^0-9.]/g, '') || '98'
   );
   const [respiratoryRate, setRespiratoryRate] = useState(
-    initialVitals?.respiratoryRate?.replace(/[^0-9.]/g, '') || ''
+    initialVitals?.respiratoryRate?.replace(/[^0-9.]/g, '') || '16'
   );
 
   // Quick Clinical Assessment Checks
-  const systolicNum = parseFloat(systolic);
-  const diastolicNum = parseFloat(diastolic);
-  const pulseNum = parseFloat(pulse);
-  const tempNum = parseFloat(temperature);
-  const spo2Num = parseFloat(oxygenSaturation);
+  const systolicNum = systolic ? parseFloat(systolic) : NaN;
+  const diastolicNum = diastolic ? parseFloat(diastolic) : NaN;
+  const pulseNum = pulse ? parseFloat(pulse) : NaN;
+  const tempNum = temperature ? parseFloat(temperature) : NaN;
+  const spo2Num = oxygenSaturation ? parseFloat(oxygenSaturation) : NaN;
 
-  const isBpHypertensive =
-    (systolicNum && systolicNum >= 140) || (diastolicNum && diastolicNum >= 90);
-  const isBpHypotensive =
-    (systolicNum && systolicNum < 90) || (diastolicNum && diastolicNum < 60);
-  const isFever = tempNum && tempNum >= 100.4;
-  const isHypoxia = spo2Num && spo2Num < 95;
-  const isTachycardia = pulseNum && pulseNum > 100;
-  const isBradycardia = pulseNum && pulseNum < 60;
+  const isBpHypertensive = Boolean(
+    (!isNaN(systolicNum) && systolicNum >= 140) || (!isNaN(diastolicNum) && diastolicNum >= 90)
+  );
+  const isBpHypotensive = Boolean(
+    (!isNaN(systolicNum) && systolicNum < 90) || (!isNaN(diastolicNum) && diastolicNum < 60)
+  );
+  const isFever = Boolean(!isNaN(tempNum) && tempNum >= 100.4);
+  const isHypoxia = Boolean(!isNaN(spo2Num) && spo2Num < 95);
+  const isTachycardia = Boolean(!isNaN(pulseNum) && pulseNum > 100);
+  const isBradycardia = Boolean(!isNaN(pulseNum) && pulseNum < 60);
 
   const handleSubmit = async () => {
     if (!systolic && !pulse && !temperature && !weight && !oxygenSaturation) {

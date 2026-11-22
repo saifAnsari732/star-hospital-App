@@ -1,4 +1,5 @@
 import apiClient, { withMockFallback } from './apiClient';
+import { firebaseRealtimeDbService } from './firebaseRealtimeDbService';
 import {
   Prescription,
   CreatePrescriptionRequest,
@@ -81,6 +82,7 @@ export const prescriptionService = {
         };
 
         mockPrescriptions.unshift(newRx);
+        void firebaseRealtimeDbService.savePrescription(newRx);
         return newRx;
       }
     );

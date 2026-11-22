@@ -9,6 +9,7 @@ import {
   ConfirmationResult,
 } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getDatabase, Database } from 'firebase/database';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -69,6 +70,9 @@ const firebaseConfig = {
   apiKey: env.EXPO_PUBLIC_FIREBASE_API_KEY?.trim() || '',
   authDomain: env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim() || '',
   projectId: env.EXPO_PUBLIC_FIREBASE_PROJECT_ID?.trim() || '',
+  databaseURL:
+    env.EXPO_PUBLIC_FIREBASE_DATABASE_URL?.trim() ||
+    'https://star-f3312-default-rtdb.firebaseio.com',
   storageBucket: env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() || '',
   messagingSenderId: env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim() || '',
   appId: env.EXPO_PUBLIC_FIREBASE_APP_ID?.trim() || '',
@@ -82,6 +86,7 @@ const hasRealFirebaseConfig = isFirebaseConfigComplete(firebaseConfig);
 let app: FirebaseApp = {} as FirebaseApp;
 let auth: Auth = {} as Auth;
 let firestore: Firestore = {} as Firestore;
+let rtdb: Database = {} as Database;
 let storage: FirebaseStorage = {} as FirebaseStorage;
 let isConfigured = false;
 
@@ -119,12 +124,18 @@ if (hasRealFirebaseConfig) {
     }
 
     firestore = getFirestore(app);
+    try {
+      rtdb = getDatabase(app);
+    } catch {
+      rtdb = {} as Database;
+    }
     storage = getStorage(app);
     isConfigured = true;
   } catch {
     app = {} as FirebaseApp;
     auth = {} as Auth;
     firestore = {} as Firestore;
+    rtdb = {} as Database;
     storage = {} as FirebaseStorage;
     isConfigured = false;
   }
@@ -133,6 +144,7 @@ if (hasRealFirebaseConfig) {
 export const firebaseApp = app;
 export const firebaseAuth = auth;
 export const firestoreDb = firestore;
+export const firebaseRtdb = rtdb;
 export const firebaseStorage = storage;
 export const isFirebaseConfigured = isConfigured;
 export const hasExplicitFirebaseEnv = hasRealFirebaseConfig;

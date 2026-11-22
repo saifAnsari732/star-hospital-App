@@ -9,7 +9,13 @@ import {
   serverTimestamp,
   limit,
 } from 'firebase/firestore';
-import { firestoreDb, isFirebaseConfigured } from '../config/firebase';
+import {
+  ref as rtdbRef,
+  set as rtdbSet,
+  update as rtdbUpdate,
+  onValue as rtdbOnValue,
+} from 'firebase/database';
+import { firestoreDb, firebaseRtdb, isFirebaseConfigured } from '../config/firebase';
 import type { Appointment } from '../types/appointment';
 
 export interface ReceptionAppointmentAlert {
@@ -43,11 +49,13 @@ class FirebaseAppointmentAlertService {
   private localListeners: Set<AlertListener> = new Set();
   private dismissListeners: Set<DismissListener> = new Set();
   private firestoreUnsubscribe: (() => void) | null = null;
+  private rtdbUnsubscribe: (() => void) | null = null;
   private recentAlertIds: Set<string> = new Set();
   private isInitialized: boolean = false;
 
   constructor() {
     this.ensureFirestoreListener();
+    this.ensureRtdbListener();
   }
 
   /**
@@ -126,11 +134,69 @@ class FirebaseAppointmentAlertService {
   }
 
   /**
+   * Initializes real-time listener on Firebase Realtime Database '/hospital_reception_alerts'
+   */
+  ensureRtdbListener(): void {
+    if (this.rtdbUnsubscribe || !firebaseRtdb || typeof (firebaseRtdb as any).app === 'undefined') return;
+
+    try {
+      const dbRef = rtdbRef(firebaseRtdb, 'hospital_reception_alerts');
+      this.rtdbUnsubscribe = rtdbOnValue(dbRef, (snapshot) => {
+        const val = snapshot.val();
+        if (!val || typeof val !== 'object') return;
+
+        Object.keys(val).forEach((key) => {
+          const data = val[key];
+          if (!data || typeof data !== 'object') return;
+
+          const alertId = data.id || key;
+          if (data.status === 'unacknowledged') {
+            if (this.recentAlertIds.has(alertId)) return;
+            this.recentAlertIds.add(alertId);
+
+            const createdAtMillis = data.createdAt ? Date.parse(data.createdAt) : Date.now();
+            if (Date.now() - createdAtMillis > STALE_ALERT_THRESHOLD_MS) {
+              return;
+            }
+
+            const alert: ReceptionAppointmentAlert = {
+              id: alertId,
+              type: 'NEW_APPOINTMENT_BOOKED',
+              priority: data.priority || 'urgent',
+              appointmentId: data.appointmentId || alertId,
+              patientId: data.patientId || 'pat-1',
+              patientName: data.patientName || 'Walk-in Patient',
+              patientMrn: data.patientMrn || 'P-00101',
+              patientPhone: data.patientPhone,
+              doctorId: data.doctorId || 'doc-1',
+              doctorName: data.doctorName || 'Dr. Amit Sharma',
+              doctorDepartment: data.doctorDepartment || 'General Medicine',
+              date: data.date || new Date().toISOString().split('T')[0],
+              timeSlot: data.timeSlot || '10:00 - 10:20 AM',
+              mode: data.mode || 'in_person',
+              consultationFee: data.consultationFee,
+              status: 'unacknowledged',
+              createdAt: data.createdAt || new Date().toISOString(),
+            };
+
+            this.notifyLocalListeners(alert);
+          } else if (data.status === 'acknowledged') {
+            this.notifyDismissListeners(alertId);
+          }
+        });
+      });
+    } catch {
+      // Safe fallback
+    }
+  }
+
+  /**
    * Subscribe reception nurse phone to real-time appointment alerts.
    * Returns an unsubscribe teardown function.
    */
   subscribe(listener: AlertListener): () => void {
     this.ensureFirestoreListener();
+    this.ensureRtdbListener();
     this.localListeners.add(listener);
     return () => {
       this.localListeners.delete(listener);
@@ -213,6 +279,20 @@ class FirebaseAppointmentAlertService {
       }
     }
 
+    // 1b. Live Firebase Realtime Database write (Realtime DB)
+    if (firebaseRtdb && typeof (firebaseRtdb as any).app !== 'undefined') {
+      try {
+        const rtdbAlertRef = rtdbRef(firebaseRtdb, `hospital_reception_alerts/${alertData.id}`);
+        await rtdbSet(rtdbAlertRef, {
+          ...alertData,
+          createdAt: new Date().toISOString(),
+          targetRoles: ['staff', 'nurse', 'receptionist', 'admin'],
+        });
+      } catch {
+        // Safe RTDB write fallback
+      }
+    }
+
     // 2. Immediate local notification for testing or single-device workflows
     this.recentAlertIds.add(alertData.id);
     this.notifyLocalListeners(alertData);
@@ -234,6 +314,19 @@ class FirebaseAppointmentAlertService {
         });
       } catch {
         // Safe ignore
+      }
+    }
+
+    if (firebaseRtdb && typeof (firebaseRtdb as any).app !== 'undefined') {
+      try {
+        const rtdbAlertRef = rtdbRef(firebaseRtdb, `hospital_reception_alerts/${alertId}`);
+        await rtdbUpdate(rtdbAlertRef, {
+          status: 'acknowledged',
+          acknowledgedBy: staffName,
+          acknowledgedAt: new Date().toISOString(),
+        });
+      } catch {
+        // Safe RTDB update fallback
       }
     }
   }

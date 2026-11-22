@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { firebaseRealtimeDbService } from './firebaseRealtimeDbService';
 import apiClient, {
   withMockFallback,
   isMockFallbackEnabled,
@@ -82,6 +83,7 @@ export const saveRegisteredAccount = async (account: RegisteredAccountItem): Pro
       REGISTERED_ACCOUNTS_STORAGE_KEY,
       JSON.stringify(inMemoryRegisteredAccounts)
     );
+    void firebaseRealtimeDbService.savePatientRegistration(account);
   } catch {
     // ignore
   }

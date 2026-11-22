@@ -613,5 +613,28 @@ service cloud.firestore {
     match /hospital_reception_alerts/{alertId} {
       allow read, write: if true;
     }
+
+    // -------------------------------------------------------------------------
+    // 8. Real-Time Hospital Clinical & Operational Collections
+    // -------------------------------------------------------------------------
+    match /hospital_appointments/{appointmentId} {
+      allow read, write: if true;
+    }
+
+    match /hospital_opd_tokens/{tokenId} {
+      allow read, write: if true;
+    }
+
+    match /hospital_prescriptions/{rxId} {
+      allow read, write: if true;
+    }
+
+    match /hospital_vitals/{vitalId} {
+      allow read, write: if true;
+    }
+
+    match /hospital_patient_registrations/{patientId} {
+      allow read, write: if true;
+    }
   }
 }
