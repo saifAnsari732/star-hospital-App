@@ -1,0 +1,11 @@
+export { DoctorDashboardScreen } from './DoctorDashboardScreen';
+export { DoctorPatientListScreen } from './DoctorPatientListScreen';
+export { DoctorPatientDetailsScreen } from './DoctorPatientDetailsScreen';
+export { OPDQueueCallerScreen } from './OPDQueueCallerScreen';
+export { ConsultationNotesScreen } from './ConsultationNotesScreen';
+export { PrescriptionBuilderScreen } from './PrescriptionBuilderScreen';
+export { DoctorScheduleScreen } from './DoctorScheduleScreen';
+export { DoctorProfileScreen } from './DoctorProfileScreen';
+export { DoctorVideoConsultationScreen } from './DoctorVideoConsultationScreen';
+export { DoctorNotificationsScreen } from './DoctorNotificationsScreen';
+export { DoctorSettingsScreen } from './DoctorSettingsScreen';

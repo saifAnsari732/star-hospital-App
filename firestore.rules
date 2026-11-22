@@ -1,0 +1,610 @@
+rules_version = '2';
+
+// =============================================================================
+// Star Hospital Mobile App (React Native / Expo) — Cloud Firestore Security Rules
+// =============================================================================
+//
+// Architecture Notice:
+//   ICTHospital (Laravel + MySQL) is the authoritative system of record for
+//   all clinical, medical, diagnostic, billing, and inpatient records.
+//   Cloud Firestore is strictly limited to non-clinical mobile-support data
+//   (user preference mirrors, push notification tokens, notification settings,
+//   public non-sensitive app configuration, and anonymized backend-synced OPD
+//   queue snapshots).
+//
+//   All clinical/medical collections (patients, appointments, prescriptions,
+//   labReports, invoices, beds, vitals, admissions, medicalHistory) MUST NOT
+//   reside in Firestore and are denied by default.
+//
+// =============================================================================
+// Assumed Data Model
+// =============================================================================
+//
+// Collection: users
+// Document ID: {userId} (matches Firebase Auth UID)
+// Fields:
+//   - uid: string (required, immutable, 1..128 chars, == userId == auth.uid on create)
+//   - role: string (required, server-controlled/immutable for non-admins:
+//       'patient' | 'doctor' | 'staff')
+//   - designation: string (optional, only valid when role == 'staff',
+//       server-controlled/immutable for non-admins:
+//       'nurse' | 'lab_tech' | 'laboratorist' | 'pharmacist' |
+//       'receptionist' | 'billing' | 'billing_clerk' | 'admin')
+//   - verified: bool (required, must be false on client create, immutable for non-admins)
+//   - entityId: string (optional, 1..64 chars, Laravel entity ID e.g. 'pat-1001',
+//       server-controlled/immutable for non-admins)
+//   - displayName: string (optional, 1..80 chars)
+//   - avatarUrl: string (optional, HTTPS URL, 9..500 chars)
+//   - languagePreference: string (optional, 'en' | 'ur' | 'hi' | 'mr' | 'gu' | 'bn' | 'ta')
+//   - themePreference: string (optional, 'light' | 'dark' | 'system')
+//   - notificationsEnabled: bool (optional)
+//   - biometricLockEnabled: bool (optional)
+//   - onboardingCompleted: bool (optional)
+//   - createdAt: timestamp (required, immutable, recent on client create)
+//   - updatedAt: timestamp (required, recent on client create/update)
+//
+// Collection: deviceTokens
+// Document ID: {userId} (matches Firebase Auth UID, single primary device per user)
+// Fields:
+//   - uid: string (required, immutable, 1..128 chars, == userId)
+//   - token: string (required, 20..512 chars, FCM device token)
+//   - platform: string (required, 'android' | 'ios' | 'web')
+//   - deviceId: string (optional, 1..128 chars)
+//   - deviceName: string (optional, 1..100 chars)
+//   - appVersion: string (optional, 1..32 chars)
+//   - enabled: bool (optional)
+//   - createdAt: timestamp (required, immutable, recent on create)
+//   - updatedAt: timestamp (required, recent on create/update)
+//
+// Collection: fcmTokens
+// Document ID: {tokenId} (1..256 chars, supports multi-device tokens per user)
+// Fields:
+//   - uid: string (required, immutable, 1..128 chars, == auth.uid)
+//   - token: string (required, 20..512 chars, FCM device token)
+//   - platform: string (required, 'android' | 'ios' | 'web')
+//   - deviceId: string (optional, 1..128 chars)
+//   - deviceName: string (optional, 1..100 chars)
+//   - appVersion: string (optional, 1..32 chars)
+//   - active: bool (required)
+//   - createdAt: timestamp (required, immutable, recent on create)
+//   - updatedAt: timestamp (required, recent on create/update)
+//
+// Collection: notificationPreferences
+// Document ID: {userId} (matches Firebase Auth UID)
+// Fields:
+//   - uid: string (required, immutable, 1..128 chars, == userId)
+//   - pushEnabled: bool (required)
+//   - opdTokenAlerts: bool (optional)
+//   - appointmentReminders: bool (optional)
+//   - labReportAlerts: bool (optional)
+//   - prescriptionAlerts: bool (optional)
+//   - billingAlerts: bool (optional)
+//   - generalAnnouncements: bool (optional)
+//   - doctorArrivedAlerts: bool (optional)
+//   - doctorUrgentAlerts: bool (optional)
+//   - chamberAudioChime: bool (optional)
+//   - quietHoursEnabled: bool (optional)
+//   - quietHoursStart: string (optional, 5 chars, "HH:MM" 24-hour format)
+//   - quietHoursEnd: string (optional, 5 chars, "HH:MM" 24-hour format)
+//   - createdAt: timestamp (required, immutable, recent on create)
+//   - updatedAt: timestamp (required, recent on create/update)
+//
+// Collection: appConfig (read-only from clients; managed via Firebase Admin SDK)
+// Document ID: {docId} (e.g. 'mobile', 'maintenance', 'features')
+// Fields (strictly public, non-sensitive metadata — ZERO PII/PHI/secrets):
+//   - configKey: string
+//   - minAppVersion: string
+//   - latestAppVersion: string
+//   - maintenanceMode: bool
+//   - maintenanceMessage: string
+//   - forceUpdate: bool
+//   - supportPhone: string
+//   - supportEmail: string
+//   - supportedLanguages: list<string>
+//   - updatedAt: timestamp
+//
+// Collection: queueMirror (read-only from clients; synced by Laravel Admin SDK)
+// Document ID: {doctorId} (e.g. 'doc-1')
+// Fields (strictly non-PII operational queue snapshots — NO patient PII/MRN/diagnosis):
+//   - doctorId: string
+//   - doctorName: string
+//   - department: string
+//   - roomNo: string
+//   - date: string
+//   - currentServingToken: string
+//   - nextToken: string
+//   - totalTokens: int
+//   - waitingCount: int
+//   - inConsultationCount: int
+//   - completedCount: int
+//   - estimatedWaitPerPatientMinutes: int
+//   - queueStatus: string ('active' | 'paused' | 'closed')
+//   - updatedAt: timestamp
+//
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Default Deny (Deny all reads and writes unless explicitly matched below)
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Helper Functions
+    // =========================================================================
+
+    // Check if the request is from an authenticated Firebase Auth user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user owns the document path {userId}
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if the authenticated user owns the existing document via its 'uid' field
+    function isDocOwner() {
+      return isAuthenticated() &&
+             resource != null &&
+             ('uid' in resource.data) &&
+             resource.data.uid == request.auth.uid;
+    }
+
+    // Verify 'uid' matches authenticated user on create
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+             request.resource.data.uid == request.auth.uid;
+    }
+
+    // Ensure 'uid' field is not modified on update
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+             (resource != null &&
+              ('uid' in resource.data) &&
+              request.resource.data.uid == resource.data.uid);
+    }
+
+    // Validate required fields exist in the resulting document
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate resulting document contains only allowed fields (no schema pollution)
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Ensure specified fields were not added, modified, or removed on update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Validate required string length bounds
+    function validStringLength(field, minLen, maxLen) {
+      return (field in request.resource.data) &&
+             request.resource.data[field] is string &&
+             request.resource.data[field].size() >= minLen &&
+             request.resource.data[field].size() <= maxLen;
+    }
+
+    // Validate optional string length bounds
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    // Validate optional boolean field type
+    function isValidOptionalBool(field) {
+      return !(field in request.resource.data) ||
+             request.resource.data[field] is bool;
+    }
+
+    // Validate HTTPS URL format and bounded length (prevents javascript:/data: & 1MB payloads)
+    function isValidUrl(url) {
+      return url is string &&
+             url.size() > 8 &&
+             url.size() <= 500 &&
+             url.matches('^https://[^ ]+$');
+    }
+
+    // Validate email format with bounded length
+    function isValidEmail(email) {
+      return email is string &&
+             email.size() >= 5 &&
+             email.size() <= 254 &&
+             email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    // Validate 24-hour HH:MM time format
+    function isValidTimeHHMM(timeStr) {
+      return timeStr is string &&
+             timeStr.size() == 5 &&
+             timeStr.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    // Validate timestamp is recent (within last 5 minutes and not in the future)
+    function isRecent(time) {
+      return time is timestamp &&
+             time > request.time - duration.value(5, 'm') &&
+             time <= request.time;
+    }
+
+    // -------------------------------------------------------------------------
+    // Authority & RBAC Helpers (Derived strictly from server-minted Auth claims)
+    // -------------------------------------------------------------------------
+
+    function hasClaimRole(roleName) {
+      return isAuthenticated() &&
+             ('role' in request.auth.token) &&
+             request.auth.token.role == roleName;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (('admin' in request.auth.token) && request.auth.token.admin == true) ||
+        hasClaimRole('admin') ||
+        (hasClaimRole('staff') &&
+         ('designation' in request.auth.token) &&
+         request.auth.token.designation == 'admin')
+      );
+    }
+
+    function isDoctor() {
+      return hasClaimRole('doctor');
+    }
+
+    function isStaff() {
+      return hasClaimRole('staff');
+    }
+
+    function isPatient() {
+      return hasClaimRole('patient');
+    }
+
+    function hasStaffDesignation(designation) {
+      return isStaff() &&
+             ('designation' in request.auth.token) &&
+             request.auth.token.designation == designation;
+    }
+
+    // =========================================================================
+    // Domain Validators
+    // =========================================================================
+
+    function isValidRole(role) {
+      return role is string && role in ['patient', 'doctor', 'staff'];
+    }
+
+    function isValidStaffDesignation(designation) {
+      return designation is string && designation in [
+        'nurse',
+        'lab_tech',
+        'laboratorist',
+        'pharmacist',
+        'receptionist',
+        'billing',
+        'billing_clerk',
+        'admin'
+      ];
+    }
+
+    function isValidLanguage(lang) {
+      return lang is string && lang in ['en', 'ur', 'hi', 'mr', 'gu', 'bn', 'ta'];
+    }
+
+    function isValidPlatform(platform) {
+      return platform is string && platform in ['android', 'ios', 'web'];
+    }
+
+    // Validator for users/{userId}
+    function isValidUser(data, userId) {
+      let allowedFields = [
+        'uid',
+        'role',
+        'designation',
+        'verified',
+        'entityId',
+        'displayName',
+        'avatarUrl',
+        'languagePreference',
+        'themePreference',
+        'notificationsEnabled',
+        'biometricLockEnabled',
+        'onboardingCompleted',
+        'createdAt',
+        'updatedAt'
+      ];
+      let requiredFields = ['uid', 'role', 'verified', 'createdAt', 'updatedAt'];
+
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(requiredFields) &&
+             data.uid is string &&
+             data.uid == userId &&
+             data.uid.size() >= 1 &&
+             data.uid.size() <= 128 &&
+             isValidRole(data.role) &&
+             (!('designation' in data) ||
+              (data.role == 'staff' && isValidStaffDesignation(data.designation))) &&
+             data.verified is bool &&
+             isValidOptionalString('entityId', 1, 64) &&
+             isValidOptionalString('displayName', 1, 80) &&
+             (!('avatarUrl' in data) || isValidUrl(data.avatarUrl)) &&
+             (!('languagePreference' in data) || isValidLanguage(data.languagePreference)) &&
+             (!('themePreference' in data) ||
+              (data.themePreference is string &&
+               data.themePreference in ['light', 'dark', 'system'])) &&
+             isValidOptionalBool('notificationsEnabled') &&
+             isValidOptionalBool('biometricLockEnabled') &&
+             isValidOptionalBool('onboardingCompleted') &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    // Prevent non-admin clients from self-assigning privileged roles, designations,
+    // verification status, or backend entity bindings on user document creation.
+    function isSafeClientUserCreate(data) {
+      return (data.role == 'patient' ||
+              (('role' in request.auth.token) && data.role == request.auth.token.role)) &&
+             (!('designation' in data) ||
+              (('designation' in request.auth.token) &&
+               data.designation == request.auth.token.designation &&
+               data.designation != 'admin')) &&
+             data.verified == false &&
+             (!('entityId' in data) ||
+              (('entityId' in request.auth.token) &&
+               data.entityId == request.auth.token.entityId));
+    }
+
+    // Validator for deviceTokens/{userId}
+    function isValidDeviceToken(data, userId) {
+      let allowedFields = [
+        'uid',
+        'token',
+        'platform',
+        'deviceId',
+        'deviceName',
+        'appVersion',
+        'enabled',
+        'createdAt',
+        'updatedAt'
+      ];
+      let requiredFields = ['uid', 'token', 'platform', 'createdAt', 'updatedAt'];
+
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(requiredFields) &&
+             data.uid is string &&
+             data.uid == userId &&
+             data.uid.size() >= 1 &&
+             data.uid.size() <= 128 &&
+             validStringLength('token', 20, 512) &&
+             isValidPlatform(data.platform) &&
+             isValidOptionalString('deviceId', 1, 128) &&
+             isValidOptionalString('deviceName', 1, 100) &&
+             isValidOptionalString('appVersion', 1, 32) &&
+             isValidOptionalBool('enabled') &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    // Validator for fcmTokens/{tokenId}
+    function isValidFcmToken(data) {
+      let allowedFields = [
+        'uid',
+        'token',
+        'platform',
+        'deviceId',
+        'deviceName',
+        'appVersion',
+        'active',
+        'createdAt',
+        'updatedAt'
+      ];
+      let requiredFields = ['uid', 'token', 'platform', 'active', 'createdAt', 'updatedAt'];
+
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(requiredFields) &&
+             data.uid is string &&
+             data.uid.size() >= 1 &&
+             data.uid.size() <= 128 &&
+             validStringLength('token', 20, 512) &&
+             isValidPlatform(data.platform) &&
+             isValidOptionalString('deviceId', 1, 128) &&
+             isValidOptionalString('deviceName', 1, 100) &&
+             isValidOptionalString('appVersion', 1, 32) &&
+             data.active is bool &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    // Validator for notificationPreferences/{userId}
+    function isValidNotificationPreferences(data, userId) {
+      let allowedFields = [
+        'uid',
+        'pushEnabled',
+        'opdTokenAlerts',
+        'appointmentReminders',
+        'labReportAlerts',
+        'prescriptionAlerts',
+        'billingAlerts',
+        'generalAnnouncements',
+        'doctorArrivedAlerts',
+        'doctorUrgentAlerts',
+        'chamberAudioChime',
+        'quietHoursEnabled',
+        'quietHoursStart',
+        'quietHoursEnd',
+        'createdAt',
+        'updatedAt'
+      ];
+      let requiredFields = ['uid', 'pushEnabled', 'createdAt', 'updatedAt'];
+
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(requiredFields) &&
+             data.uid is string &&
+             data.uid == userId &&
+             data.uid.size() >= 1 &&
+             data.uid.size() <= 128 &&
+             data.pushEnabled is bool &&
+             isValidOptionalBool('opdTokenAlerts') &&
+             isValidOptionalBool('appointmentReminders') &&
+             isValidOptionalBool('labReportAlerts') &&
+             isValidOptionalBool('prescriptionAlerts') &&
+             isValidOptionalBool('billingAlerts') &&
+             isValidOptionalBool('generalAnnouncements') &&
+             isValidOptionalBool('doctorArrivedAlerts') &&
+             isValidOptionalBool('doctorUrgentAlerts') &&
+             isValidOptionalBool('chamberAudioChime') &&
+             isValidOptionalBool('quietHoursEnabled') &&
+             (!('quietHoursStart' in data) || isValidTimeHHMM(data.quietHoursStart)) &&
+             (!('quietHoursEnd' in data) || isValidTimeHHMM(data.quietHoursEnd)) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // 1. users/{userId} — Non-sensitive mobile profile & app preferences
+    //    - Strict owner read/write (never blanket-readable to other users)
+    //    - Clients cannot create or mutate role, designation, verified, or entityId
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+
+      allow create: if isAuthenticated() &&
+                       isValidUser(request.resource.data, userId) &&
+                       isRecent(request.resource.data.createdAt) &&
+                       isRecent(request.resource.data.updatedAt) &&
+                       (
+                         (isOwner(userId) &&
+                          uidUnchanged() &&
+                          isSafeClientUserCreate(request.resource.data)) ||
+                         isAdmin()
+                       );
+
+      allow update: if isAuthenticated() &&
+                       isValidUser(request.resource.data, userId) &&
+                       isRecent(request.resource.data.updatedAt) &&
+                       (
+                         (isOwner(userId) &&
+                          uidNotModified() &&
+                          areImmutableFieldsUnchanged([
+                            'uid',
+                            'role',
+                            'designation',
+                            'verified',
+                            'entityId',
+                            'createdAt'
+                          ])) ||
+                         (isAdmin() &&
+                          areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+                          (userId != request.auth.uid ||
+                           areImmutableFieldsUnchanged([
+                             'role',
+                             'designation',
+                             'verified',
+                             'entityId'
+                           ])))
+                       );
+
+      allow delete: if isAdmin() && userId != request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. deviceTokens/{userId} — Single-device push token registration per user
+    // -------------------------------------------------------------------------
+    match /deviceTokens/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       uidUnchanged() &&
+                       isValidDeviceToken(request.resource.data, userId) &&
+                       isRecent(request.resource.data.createdAt) &&
+                       isRecent(request.resource.data.updatedAt);
+
+      allow update: if isOwner(userId) &&
+                       uidNotModified() &&
+                       isValidDeviceToken(request.resource.data, userId) &&
+                       areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+                       isRecent(request.resource.data.updatedAt);
+
+      allow delete: if isOwner(userId);
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. fcmTokens/{tokenId} — Multi-device FCM push tokens per user
+    //    Queries MUST filter by where('uid', '==', request.auth.uid)
+    // -------------------------------------------------------------------------
+    match /fcmTokens/{tokenId} {
+      allow read: if isAuthenticated() &&
+                     resource.data.uid == request.auth.uid;
+
+      allow create: if isAuthenticated() &&
+                       tokenId.size() >= 1 &&
+                       tokenId.size() <= 256 &&
+                       uidUnchanged() &&
+                       request.resource.data.uid == request.auth.uid &&
+                       isValidFcmToken(request.resource.data) &&
+                       isRecent(request.resource.data.createdAt) &&
+                       isRecent(request.resource.data.updatedAt);
+
+      allow update: if isDocOwner() &&
+                       uidNotModified() &&
+                       isValidFcmToken(request.resource.data) &&
+                       areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+                       isRecent(request.resource.data.updatedAt);
+
+      allow delete: if isDocOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. notificationPreferences/{userId} — Per-user push alert settings
+    // -------------------------------------------------------------------------
+    match /notificationPreferences/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       uidUnchanged() &&
+                       isValidNotificationPreferences(request.resource.data, userId) &&
+                       isRecent(request.resource.data.createdAt) &&
+                       isRecent(request.resource.data.updatedAt);
+
+      allow update: if isOwner(userId) &&
+                       uidNotModified() &&
+                       isValidNotificationPreferences(request.resource.data, userId) &&
+                       areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+                       isRecent(request.resource.data.updatedAt);
+
+      allow delete: if isOwner(userId);
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. appConfig/{docId} — Public, non-sensitive read-only app metadata
+    //    Client writes are strictly disabled; managed solely via Admin SDK.
+    // -------------------------------------------------------------------------
+    match /appConfig/{docId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. queueMirror/{doctorId} — Read-only live OPD queue status snapshots
+    //    Synced exclusively from ICTHospital Laravel backend via Admin SDK.
+    //    Authenticated read only; must NEVER contain patient PII or medical data.
+    // -------------------------------------------------------------------------
+    match /queueMirror/{doctorId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if false;
+    }
+  }
+}

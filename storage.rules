@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// Star Hospital Firebase Storage Security Rules
+// - Profile avatars are strictly scoped to the authenticated owner under /profile_images/{userId}/
+// - Clinical attachments (lab reports, prescriptions) are never public and cannot be uploaded/modified directly by unverified clients
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function hasHospitalStaffOrDoctorClaim() {
+      return isSignedIn() &&
+        (request.auth.token.role == 'doctor' || request.auth.token.role == 'staff');
+    }
+
+    function isValidAvatarUpload() {
+      return request.resource != null &&
+        request.resource.size <= 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/(jpeg|jpg|png|webp)');
+    }
+
+    // User profile images (patients, doctors, staff)
+    match /profile_images/{userId}/{fileName} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(userId) && isValidAvatarUpload();
+      allow delete: if isOwner(userId);
+    }
+
+    // Sensitive lab report PDFs/images managed by ICTHospital backend / verified clinicians
+    match /lab_reports/{patientId}/{fileName} {
+      allow read: if isOwner(patientId) || hasHospitalStaffOrDoctorClaim();
+      allow write: if false;
+    }
+
+    // Sensitive digital prescriptions managed by ICTHospital backend / verified clinicians
+    match /prescriptions/{patientId}/{fileName} {
+      allow read: if isOwner(patientId) || hasHospitalStaffOrDoctorClaim();
+      allow write: if false;
+    }
+
+    // Deny all other storage paths by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
