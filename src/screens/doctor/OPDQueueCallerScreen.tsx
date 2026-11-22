@@ -31,6 +31,7 @@ import { opdTokenService } from '@/services/opdTokenService';
 import { doctorService } from '@/services/doctorService';
 import { patientService } from '@/services/patientService';
 import { appointmentService } from '@/services/appointmentService';
+import { voiceQueueAnnouncementService } from '@/services/voiceQueueAnnouncementService';
 import { mockOpdTokens } from '@/fixtures/mockOpdTokens';
 import type { Doctor } from '@/types/doctor';
 import type { OPDToken } from '@/types/opdToken';
@@ -197,6 +198,12 @@ export const OPDQueueCallerScreen: React.FC<OPDQueueCallerProps> = ({
       await loadQueue();
       if (nextCalled) {
         triggerChime(nextCalled.tokenNumber, nextCalled.patientName);
+        void voiceQueueAnnouncementService.announceYourTurnNow(
+          nextCalled.tokenNumber,
+          nextCalled.patientName,
+          doctorDisplayName,
+          chamberLabel
+        );
       }
     } catch {
       Alert.alert('Queue Error', 'Failed to call next patient.');
@@ -209,10 +216,17 @@ export const OPDQueueCallerScreen: React.FC<OPDQueueCallerProps> = ({
   const handleCompleteCurrent = async () => {
     if (!servingToken) return;
     setActionBusy(true);
+    const finished = servingToken;
     try {
       await opdTokenService.completeToken(servingToken.id);
       setConsultElapsedSeconds(0);
       await loadQueue();
+      if (finished) {
+        void voiceQueueAnnouncementService.announceConsultationCompleted(
+          finished.tokenNumber,
+          finished.patientName
+        );
+      }
     } catch {
       Alert.alert('Queue Error', 'Failed to complete active consultation.');
     } finally {

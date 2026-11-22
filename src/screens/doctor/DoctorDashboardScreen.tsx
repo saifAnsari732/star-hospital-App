@@ -38,6 +38,7 @@ import { opdTokenService } from '../../services/opdTokenService';
 import { appointmentService } from '../../services/appointmentService';
 import { patientService } from '../../services/patientService';
 import { notificationService } from '../../services/notificationService';
+import { voiceQueueAnnouncementService } from '../../services/voiceQueueAnnouncementService';
 import type { Doctor } from '../../types/doctor';
 import type { OPDToken } from '../../types/opdToken';
 import { getDoctorAvatarSource } from '../../assets/images';
@@ -138,8 +139,16 @@ export const DoctorDashboardScreen: React.FC<{ navigation: any }> = ({
   const handleCallNext = async () => {
     setActionBusy(true);
     try {
-      await opdTokenService.callNextToken(doctor?.id || 'doc-1');
+      const called = await opdTokenService.callNextToken(doctor?.id || 'doc-1');
       await loadDashboard();
+      if (called) {
+        void voiceQueueAnnouncementService.announceYourTurnNow(
+          called.tokenNumber,
+          called.patientName,
+          doctor?.name || user?.name || 'Dr. Amit Sharma',
+          doctor?.roomNo || 'OPD Room 101'
+        );
+      }
     } catch {
       setError('Failed to advance OPD queue.');
     } finally {
@@ -150,9 +159,16 @@ export const DoctorDashboardScreen: React.FC<{ navigation: any }> = ({
   const handleCompleteCurrent = async () => {
     if (!activePatient) return;
     setActionBusy(true);
+    const finished = activePatient;
     try {
       await opdTokenService.completeToken(activePatient.id);
       await loadDashboard();
+      if (finished) {
+        void voiceQueueAnnouncementService.announceConsultationCompleted(
+          finished.tokenNumber,
+          finished.patientName
+        );
+      }
     } catch {
       setError('Failed to complete current consultation.');
     } finally {
