@@ -78,26 +78,26 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     justifyContent: 'space-between',
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   graphicContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 24,
+    paddingTop: 16,
   },
   doctorFrame: {
-    width: 268,
-    height: 248,
+    width: 335,
+    height: 310,
     borderRadius: 24,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
   doctorImage: {
-    width: 268,
-    height: 248,
+    width: '100%',
+    height: '100%',
   },
   textContainer: {
     alignItems: 'center',
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
     textAlign: 'center',
-    marginBottom: 22,
+    marginBottom: 16,
   },
   dotsRow: {
     flexDirection: 'row',
