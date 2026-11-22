@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -127,7 +128,16 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      try {
+        await logout();
+      } catch (err) {
+        console.warn('Logout failed:', err);
+      }
+      return;
+    }
+
     Alert.alert(
       'Sign Out',
       'Sign out of your Star Hospital patient session?',
@@ -137,7 +147,11 @@ export const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            await logout();
+            try {
+              await logout();
+            } catch (err) {
+              console.warn('Logout failed:', err);
+            }
           },
         },
       ]

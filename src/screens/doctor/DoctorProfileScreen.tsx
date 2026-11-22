@@ -9,6 +9,7 @@ import {
   Alert,
   StatusBar,
   Image,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -46,7 +47,16 @@ export const DoctorProfileScreen: React.FC<{ navigation?: any }> = ({
       .catch(() => {});
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      try {
+        await logout();
+      } catch (err) {
+        console.warn('Logout failed:', err);
+      }
+      return;
+    }
+
     Alert.alert(
       'Sign Out',
       'Sign out from the Star Hospital Doctor Portal?',
@@ -56,7 +66,11 @@ export const DoctorProfileScreen: React.FC<{ navigation?: any }> = ({
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            await logout();
+            try {
+              await logout();
+            } catch (err) {
+              console.warn('Logout failed:', err);
+            }
           },
         },
       ]

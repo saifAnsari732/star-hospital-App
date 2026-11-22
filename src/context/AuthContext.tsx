@@ -211,7 +211,16 @@ export const validateStoredSession = (
 };
 
 const purgePersistedSession = async (): Promise<void> => {
-  await AsyncStorage.removeItem(STORAGE_SESSION_KEY);
+  try {
+    await AsyncStorage.multiRemove([
+      STORAGE_SESSION_KEY,
+      AUTH_TOKEN_STORAGE_KEY,
+      USER_INFO_STORAGE_KEY,
+      ROLE_STORAGE_KEY,
+    ]);
+  } catch {
+    await AsyncStorage.removeItem(STORAGE_SESSION_KEY).catch(() => {});
+  }
   await apiClient.clearAuthToken();
 };
 

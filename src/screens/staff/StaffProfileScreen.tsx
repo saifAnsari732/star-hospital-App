@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
   StatusBar,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -41,7 +42,16 @@ export const StaffProfileScreen: React.FC<{ navigation?: any }> = ({
   const [pushAlerts, setPushAlerts] = useState(true);
   const [shiftReminders, setShiftReminders] = useState(true);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (Platform.OS === 'web') {
+      try {
+        await logout();
+      } catch (err) {
+        console.warn('Logout failed:', err);
+      }
+      return;
+    }
+
     Alert.alert(
       'Sign Out',
       'Sign out of the Star Hospital Staff Portal?',
@@ -51,7 +61,11 @@ export const StaffProfileScreen: React.FC<{ navigation?: any }> = ({
           text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
-            await logout();
+            try {
+              await logout();
+            } catch (err) {
+              console.warn('Logout failed:', err);
+            }
           },
         },
       ]
