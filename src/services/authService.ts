@@ -683,6 +683,54 @@ export const authService = {
   },
 
   /**
+   * Refresh authentication access token using active refresh token
+   */
+  async refreshToken(refreshToken: string): Promise<AuthResponse> {
+    return withMockFallback(
+      () =>
+        apiClient.post<AuthResponse>('/api/v1/auth/refresh', {
+          refreshToken,
+        }),
+      async () => {
+        const storedUser = await AsyncStorage.getItem(USER_INFO_STORAGE_KEY);
+        const user = storedUser ? JSON.parse(storedUser) : null;
+        const role = user?.role || 'patient';
+        const newToken = `star_jwt_${role}_${Date.now()}`;
+        const newRefreshToken = `star_refresh_${Date.now()}`;
+
+        await AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, newToken);
+        return {
+          token: newToken,
+          refreshToken: newRefreshToken,
+          expiresIn: 86400,
+          user,
+        };
+      }
+    );
+  },
+
+  /**
+   * Admin-Only: Assign or update role of any user
+   */
+  async assignUserRoleRemote(
+    targetEmailOrId: string,
+    name: string,
+    role: UserRole,
+    designation?: StaffDesignation
+  ): Promise<void> {
+    await assignUserRoleByAdmin(targetEmailOrId, name, role, designation);
+    try {
+      await apiClient.post('/api/v1/admin/users/assign-role', {
+        targetEmailOrId,
+        role,
+        designation,
+      });
+    } catch {
+      // Local registry already updated as fallback
+    }
+  },
+
+  /**
    * @deprecated Client-side role switching without verified backend re-authentication
    * is blocked to enforce strict role-based access isolation.
    */
