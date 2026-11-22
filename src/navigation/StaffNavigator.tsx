@@ -1,8 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { NavigatorScreenParams } from '@react-navigation/native';
+import { NavigatorScreenParams, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  firebaseAppointmentAlertService,
+  ReceptionAppointmentAlert,
+} from '../services/firebaseAppointmentAlertService';
+import { emergencyAudioService } from '../services/emergencyAudioService';
+import { FullScreenAppointmentAlertModal } from '../components/staff/FullScreenAppointmentAlertModal';
 import {
   LayoutDashboard,
   Users,
@@ -250,65 +257,111 @@ export const StaffTabNavigator = StaffTabs;
 export const StaffNavigator: React.FC = () => {
   const insets = useSafeAreaInsets();
   const stackBottomPad = Math.max(insets.bottom, 14);
+  const navigation = useNavigation<any>();
+
+  // Full-screen Real-time Firebase Appointment Alert State
+  const [activeAlert, setActiveAlert] = useState<ReceptionAppointmentAlert | null>(null);
+  const [isAlertVisible, setIsAlertVisible] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Subscribe reception nurse phone to live Firebase Firestore appointment alerts
+    const unsubscribe = firebaseAppointmentAlertService.subscribe((alert) => {
+      setActiveAlert(alert);
+      setIsAlertVisible(true);
+      emergencyAudioService.startSiren();
+    });
+
+    return () => {
+      unsubscribe();
+      emergencyAudioService.stopSiren();
+    };
+  }, []);
+
+  const handleAcknowledge = useCallback(() => {
+    emergencyAudioService.stopSiren();
+    setIsAlertVisible(false);
+    if (activeAlert?.id) {
+      void firebaseAppointmentAlertService.acknowledgeAlert(activeAlert.id);
+    }
+  }, [activeAlert]);
+
+  const handleNavigateToQueue = useCallback(() => {
+    handleAcknowledge();
+    try {
+      navigation.navigate('StaffOPDQueue');
+    } catch {
+      // Fallback
+    }
+  }, [handleAcknowledge, navigation]);
 
   return (
-    <Stack.Navigator
-      initialRouteName="StaffTabs"
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        contentStyle: {
-          backgroundColor: colors.background,
-          paddingBottom: route.name === 'StaffTabs' ? 0 : stackBottomPad,
-        },
-      })}
-    >
-      <Stack.Screen name="StaffTabs" component={StaffTabs} />
-      <Stack.Screen name="StaffPatientReg" component={GuardedPatientReg} />
-      <Stack.Screen
-        name="StaffPatientSearch"
-        component={GuardedPatientSearch}
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator
+        initialRouteName="StaffTabs"
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          contentStyle: {
+            backgroundColor: colors.background,
+            paddingBottom: route.name === 'StaffTabs' ? 0 : stackBottomPad,
+          },
+        })}
+      >
+        <Stack.Screen name="StaffTabs" component={StaffTabs} />
+        <Stack.Screen name="StaffPatientReg" component={GuardedPatientReg} />
+        <Stack.Screen
+          name="StaffPatientSearch"
+          component={GuardedPatientSearch}
+        />
+        <Stack.Screen
+          name="StaffPatientDetails"
+          component={GuardedPatientDetails}
+        />
+        <Stack.Screen
+          name="StaffAppointmentManage"
+          component={GuardedAppointmentManage}
+        />
+        <Stack.Screen
+          name="StaffBookAppointment"
+          component={GuardedBookAppointment}
+        />
+        <Stack.Screen name="TokenGeneration" component={GuardedTokenGen} />
+        <Stack.Screen name="StaffOPDQueue" component={GuardedOPDQueue} />
+        <Stack.Screen name="NurseVitals" component={GuardedNurseVitals} />
+        <Stack.Screen name="LabEntry" component={GuardedLabEntry} />
+        <Stack.Screen
+          name="StaffLabTestDetail"
+          component={GuardedLabTestDetail}
+        />
+        <Stack.Screen
+          name="PharmacyDispense"
+          component={GuardedPharmacyDispense}
+        />
+        <Stack.Screen
+          name="BillingInvoice"
+          component={GuardedBillingInvoice}
+        />
+        <Stack.Screen
+          name="StaffPaymentHistory"
+          component={GuardedPaymentHistory}
+        />
+        <Stack.Screen name="AdmissionBed" component={GuardedAdmissionBed} />
+        <Stack.Screen name="StaffDischarge" component={GuardedDischarge} />
+        <Stack.Screen
+          name="StaffNotifications"
+          component={StaffNotificationsScreen}
+        />
+        <Stack.Screen name="StaffSettings" component={StaffSettingsScreen} />
+        <Stack.Screen name="StaffProfile" component={StaffProfileScreen} />
+      </Stack.Navigator>
+
+      {/* Full-screen Loud Audio Alert for Reception & Triage Nurses */}
+      <FullScreenAppointmentAlertModal
+        alert={activeAlert}
+        visible={isAlertVisible}
+        onAcknowledge={handleAcknowledge}
+        onNavigateToQueue={handleNavigateToQueue}
       />
-      <Stack.Screen
-        name="StaffPatientDetails"
-        component={GuardedPatientDetails}
-      />
-      <Stack.Screen
-        name="StaffAppointmentManage"
-        component={GuardedAppointmentManage}
-      />
-      <Stack.Screen
-        name="StaffBookAppointment"
-        component={GuardedBookAppointment}
-      />
-      <Stack.Screen name="TokenGeneration" component={GuardedTokenGen} />
-      <Stack.Screen name="StaffOPDQueue" component={GuardedOPDQueue} />
-      <Stack.Screen name="NurseVitals" component={GuardedNurseVitals} />
-      <Stack.Screen name="LabEntry" component={GuardedLabEntry} />
-      <Stack.Screen
-        name="StaffLabTestDetail"
-        component={GuardedLabTestDetail}
-      />
-      <Stack.Screen
-        name="PharmacyDispense"
-        component={GuardedPharmacyDispense}
-      />
-      <Stack.Screen
-        name="BillingInvoice"
-        component={GuardedBillingInvoice}
-      />
-      <Stack.Screen
-        name="StaffPaymentHistory"
-        component={GuardedPaymentHistory}
-      />
-      <Stack.Screen name="AdmissionBed" component={GuardedAdmissionBed} />
-      <Stack.Screen name="StaffDischarge" component={GuardedDischarge} />
-      <Stack.Screen
-        name="StaffNotifications"
-        component={StaffNotificationsScreen}
-      />
-      <Stack.Screen name="StaffSettings" component={StaffSettingsScreen} />
-      <Stack.Screen name="StaffProfile" component={StaffProfileScreen} />
-    </Stack.Navigator>
+    </View>
   );
 };
 

@@ -1,4 +1,5 @@
 import apiClient, { withMockFallback } from './apiClient';
+import { firebaseAppointmentAlertService } from './firebaseAppointmentAlertService';
 import {
   Appointment,
   BookAppointmentRequest,
@@ -75,7 +76,7 @@ export const appointmentService = {
    * Book a new doctor appointment
    */
   async bookAppointment(req: BookAppointmentRequest): Promise<Appointment> {
-    return withMockFallback(
+    const createdAppointment = await withMockFallback(
       () => apiClient.post<Appointment>('/api/v1/appointments', req),
       () => {
         const doc =
@@ -108,6 +109,15 @@ export const appointmentService = {
         return newAppointment;
       }
     );
+
+    // Live Firebase Cloud Firestore priority broadcast for Reception & Triage Nurses
+    try {
+      void firebaseAppointmentAlertService.broadcastNewAppointmentAlert(createdAppointment);
+    } catch {
+      // Non-blocking
+    }
+
+    return createdAppointment;
   },
 
   /**

@@ -31,7 +31,10 @@ import {
   ClipboardCheck,
   LogOut,
   Menu,
+  BellRing,
+  Volume2,
 } from 'lucide-react-native';
+import { firebaseAppointmentAlertService } from '../../services/firebaseAppointmentAlertService';
 import { StarLoader } from '../../components/common';
 import { StaffKpiCard } from '../../components/staff/StaffKpiCard';
 import { DesignationBadge } from '../../components/staff/DesignationBadge';
@@ -905,6 +908,31 @@ export const StaffDashboardScreen: React.FC<{ navigation: any }> = ({
           </View>
         ) : null}
 
+        {/* Live Firebase Emergency Dispatch Card for Reception / Nurses */}
+        <View style={styles.firebaseAlertCard}>
+          <View style={styles.firebaseAlertLeft}>
+            <View style={styles.livePulseDot} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.firebaseAlertTitle}>Live Firebase Siren Listener</Text>
+              <Text style={styles.firebaseAlertSub}>
+                Full-screen loud alarm triggers when patient books
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.testSirenBtn}
+            onPress={() => {
+              firebaseAppointmentAlertService.triggerTestAlert();
+            }}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Test siren alarm"
+          >
+            <Volume2 size={16} color="#FFFFFF" />
+            <Text style={styles.testSirenBtnText}>Test Siren</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Permitted Quick Actions Grid */}
         <Text style={styles.sectionTitle}>
           Permitted {getDesignationLabel(designation)} Workflows
@@ -1229,6 +1257,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginBottom: 14,
+  },
+  firebaseAlertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    borderWidth: 1.2,
+    borderColor: '#DC2626',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  firebaseAlertLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 10,
+  },
+  livePulseDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#EF4444',
+  },
+  firebaseAlertTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  firebaseAlertSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  testSirenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#DC2626',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  testSirenBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   errorText: {
     color: '#B91C1C',
