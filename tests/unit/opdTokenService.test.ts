@@ -5,6 +5,8 @@
  */
 
 import { mockAdapter } from '../../src/services/mock/mockAdapter';
+import { opdTokenService } from '../../src/services/opdTokenService';
+import { mockOpdTokens } from '../../src/fixtures/mockOpdTokens';
 
 describe('OPDTokenService & Queue Math Unit Tests', () => {
   beforeEach(() => {
@@ -98,5 +100,43 @@ describe('OPDTokenService & Queue Math Unit Tests', () => {
     expect(steps[1].status).toBe('current');
     expect(steps[2].status).toBe('waiting');
     expect(steps[2].tokenNumber).toBe(response.data.tokenNumber);
+  });
+
+  // Test 9: Automatic token generation & Patient ID payment registration
+  it('should automatically issue OPD Token and record payment linked to Patient ID', async () => {
+    const mockAppt: any = {
+      id: 'apt-test-999',
+      patientId: 'pat-1',
+      patientMrn: 'P-00102',
+      patientName: 'Ali Khan',
+      doctorId: 'doc-1',
+      consultationFee: 500,
+      paymentStatus: 'paid',
+    };
+
+    const token = await opdTokenService.generateTokenForAppointment(mockAppt);
+    expect(token).toBeDefined();
+    expect(token.patientId).toBe('pat-1');
+    expect(token.patientMrn).toBe('P-00102');
+    expect(token.isPaid).toBe(true);
+    expect(token.paymentAmount).toBe(500);
+
+    const payments = await opdTokenService.getPatientPayments('pat-1');
+    expect(payments.length).toBeGreaterThanOrEqual(1);
+    expect(payments[0].patientId).toBe('pat-1');
+    expect(payments[0].status).toBe('paid');
+  });
+
+  // Test 10: 10-Minute timer limit check and stale token auto-expire
+  it('should identify and auto-expire tokens exceeding consultation time limit', async () => {
+    const staleToken = mockOpdTokens.find((t) => t.status === 'in_consultation');
+    if (staleToken) {
+      // Set expired timestamp
+      staleToken.expiresAt = new Date(Date.now() - 5000).toISOString();
+      const expiredTokens = await opdTokenService.checkAndExpireStaleTokens();
+      expect(expiredTokens.length).toBeGreaterThanOrEqual(1);
+      expect(staleToken.status).toBe('completed');
+      expect(staleToken.autoExpired).toBe(true);
+    }
   });
 });

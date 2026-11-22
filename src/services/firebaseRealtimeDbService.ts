@@ -293,6 +293,53 @@ class FirebaseRealtimeDbService {
     // Realtime Database sync
     void this.syncToRtdb(`hospital_patient_registrations/${account.id}`, account);
   }
+
+  // ===========================================================================
+  // 6. PATIENT PAYMENTS & OPD BILLING LEDGER (Dual Realtime DB & Firestore Sync)
+  // ===========================================================================
+
+  async savePatientPayment(payment: {
+    id: string;
+    patientId: string;
+    patientMrn: string;
+    patientName: string;
+    tokenId?: string;
+    tokenNumber?: string;
+    appointmentId?: string;
+    doctorId: string;
+    doctorName: string;
+    department: string;
+    amount: number;
+    currency?: string;
+    status: 'paid' | 'pending' | 'refunded';
+    paymentMethod: string;
+    transactionRef: string;
+    timestamp?: string;
+    description?: string;
+  }): Promise<void> {
+    const paymentRecord = {
+      ...payment,
+      currency: payment.currency || 'INR',
+      timestamp: payment.timestamp || new Date().toISOString(),
+    };
+
+    if (isFirebaseConfigured && firestoreDb) {
+      try {
+        const payDocRef = doc(collection(firestoreDb, 'hospital_patient_payments'), payment.id);
+        await setDoc(payDocRef, {
+          ...paymentRecord,
+          createdAt: serverTimestamp(),
+        }, { merge: true });
+        logger.info('firebaseRealtimeDb', 'Patient payment saved to Firestore', { id: payment.id, patientId: payment.patientId });
+      } catch (err) {
+        logger.warn('firebaseRealtimeDb', 'Firestore payment save error', { err });
+      }
+    }
+
+    // Dual-sync to Realtime Database under patient-specific key and global payments list
+    void this.syncToRtdb(`hospital_patient_payments/${payment.patientId}/${payment.id}`, paymentRecord);
+    void this.syncToRtdb(`hospital_all_payments/${payment.id}`, paymentRecord);
+  }
 }
 
 export const firebaseRealtimeDbService = new FirebaseRealtimeDbService();

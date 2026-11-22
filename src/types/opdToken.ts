@@ -28,6 +28,9 @@ export interface OPDToken {
   generatedAt: string;
   roomNo?: string;
   consultStartedAt?: string;
+  expiresAt?: string;
+  consultDurationLimitSeconds?: number;
+  autoExpired?: boolean;
   completedAt?: string;
   isPaid?: boolean;
   paymentAmount?: number;

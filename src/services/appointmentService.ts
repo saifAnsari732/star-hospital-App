@@ -1,6 +1,7 @@
 import apiClient, { withMockFallback } from './apiClient';
 import { firebaseAppointmentAlertService } from './firebaseAppointmentAlertService';
 import { firebaseRealtimeDbService } from './firebaseRealtimeDbService';
+import { opdTokenService } from './opdTokenService';
 import {
   Appointment,
   BookAppointmentRequest,
@@ -113,6 +114,13 @@ export const appointmentService = {
 
     // Persist to Cloud Firestore Real-Time DB
     void firebaseRealtimeDbService.saveAppointment(createdAppointment);
+
+    // Automatically issue OPD Token and record Patient Payment in Realtime DB
+    try {
+      void opdTokenService.generateTokenForAppointment(createdAppointment);
+    } catch {
+      // Non-blocking
+    }
 
     // Live Firebase Cloud Firestore priority broadcast for Reception & Triage Nurses (<500ms)
     try {

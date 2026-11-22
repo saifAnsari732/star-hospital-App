@@ -139,18 +139,50 @@ export const OPDQueueCallerScreen: React.FC<OPDQueueCallerProps> = ({
     }, [loadQueue])
   );
 
-  // Timer tick for consultation
+  // 10-Minute Consultation Limit (600 seconds)
+  const CONSULT_LIMIT_SECONDS = 10 * 60;
+  const remainingSeconds = Math.max(0, CONSULT_LIMIT_SECONDS - consultElapsedSeconds);
+
+  const handleAutoExpire = useCallback(
+    async (token: QueuePatientData) => {
+      try {
+        await opdTokenService.completeToken(token.id, 'auto_expired');
+        setConsultElapsedSeconds(0);
+        await loadQueue();
+        setIsChimeActive(true);
+        setChimeMessage(
+          `⏰ Token ${token.tokenNumber} (${token.patientName}) 10-Minute Limit Reached • Consultation Auto-Completed.`
+        );
+        void voiceQueueAnnouncementService.announceConsultationCompleted(
+          token.tokenNumber,
+          token.patientName
+        );
+        setTimeout(() => setIsChimeActive(false), 5000);
+      } catch {
+        // Safe fallback
+      }
+    },
+    [loadQueue]
+  );
+
+  // Timer tick for consultation with 10-minute auto-expiry
   useEffect(() => {
     let timer: any = null;
     if (servingToken) {
       timer = setInterval(() => {
-        setConsultElapsedSeconds((prev) => prev + 1);
+        setConsultElapsedSeconds((prev) => {
+          const nextSec = prev + 1;
+          if (nextSec >= CONSULT_LIMIT_SECONDS) {
+            void handleAutoExpire(servingToken);
+          }
+          return nextSec;
+        });
       }, 1000);
     }
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [servingToken]);
+  }, [servingToken, handleAutoExpire]);
 
   const formatTimer = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -345,16 +377,77 @@ export const OPDQueueCallerScreen: React.FC<OPDQueueCallerProps> = ({
               <Radio size={14} color="#7C3AED" />
               <Text style={styles.liveIndicatorText}>NOW SERVING IN CHAMBER</Text>
             </View>
-            <View style={styles.timerBadge}>
-              <Clock size={13} color="#0866C6" />
-              <Text style={styles.timerText}>
-                {servingToken ? formatTimer(consultElapsedSeconds) : '00:00'}
+            <View
+              style={[
+                styles.timerBadge,
+                servingToken && remainingSeconds <= 60
+                  ? styles.timerBadgeCritical
+                  : servingToken && remainingSeconds <= 180
+                  ? styles.timerBadgeWarning
+                  : null,
+              ]}
+            >
+              <Clock
+                size={13}
+                color={
+                  servingToken && remainingSeconds <= 60
+                    ? '#DC2626'
+                    : servingToken && remainingSeconds <= 180
+                    ? '#D97706'
+                    : '#0866C6'
+                }
+              />
+              <Text
+                style={[
+                  styles.timerText,
+                  servingToken && remainingSeconds <= 60
+                    ? { color: '#DC2626', fontWeight: '800' }
+                    : servingToken && remainingSeconds <= 180
+                    ? { color: '#D97706', fontWeight: '800' }
+                    : null,
+                ]}
+              >
+                {servingToken
+                  ? `${formatTimer(remainingSeconds)} left (10m max)`
+                  : '10:00 Auto-Limit'}
               </Text>
             </View>
           </View>
 
           {servingToken ? (
             <View style={styles.servingBody}>
+              {/* 10-Minute Consultation Countdown Bar */}
+              <View style={styles.countdownProgressContainer}>
+                <View style={styles.countdownProgressTrack}>
+                  <View
+                    style={[
+                      styles.countdownProgressBar,
+                      {
+                        width: `${Math.min(100, (consultElapsedSeconds / CONSULT_LIMIT_SECONDS) * 100)}%`,
+                        backgroundColor:
+                          remainingSeconds <= 60
+                            ? '#DC2626'
+                            : remainingSeconds <= 180
+                            ? '#F59E0B'
+                            : '#22C55E',
+                      },
+                    ]}
+                  />
+                </View>
+                <View style={styles.countdownLabelRow}>
+                  <Text style={styles.countdownLeftLabel}>
+                    Elapsed: {formatTimer(consultElapsedSeconds)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.countdownRightLabel,
+                      remainingSeconds <= 60 && { color: '#DC2626', fontWeight: '800' },
+                    ]}
+                  >
+                    Auto-Expires in: {formatTimer(remainingSeconds)}
+                  </Text>
+                </View>
+              </View>
               <View style={styles.tokenDisplayRow}>
                 <Text style={styles.giantTokenText}>
                   {servingToken.tokenNumber}
@@ -681,6 +774,48 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0866C6',
     fontVariant: ['tabular-nums'],
+  },
+  timerBadgeCritical: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FCA5A5',
+  },
+  timerBadgeWarning: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  countdownProgressContainer: {
+    marginBottom: 12,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  countdownProgressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  countdownProgressBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  countdownLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  countdownLeftLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  countdownRightLabel: {
+    fontSize: 11,
+    color: '#0866C6',
+    fontWeight: '700',
   },
   servingBody: {},
   tokenDisplayRow: {
