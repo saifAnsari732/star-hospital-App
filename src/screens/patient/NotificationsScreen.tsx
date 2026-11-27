@@ -17,6 +17,7 @@ import {
   Check,
 } from 'lucide-react-native';
 import { notificationService } from '../../services';
+import { nativePushNotificationService } from '../../services/firebase/nativePushNotificationService';
 import { NotificationItem } from '../../types/notification';
 
 export interface NotificationsScreenProps {
@@ -153,14 +154,43 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ naviga
           <ChevronLeft size={24} color="#142D4E" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <TouchableOpacity
-          style={styles.markReadBtn}
-          onPress={handleMarkAllRead}
-          accessibilityRole="button"
-          accessibilityLabel="Mark all as read"
-        >
-          <Check size={16} color="#0866C6" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            style={styles.testAlertBtn}
+            onPress={async () => {
+              await nativePushNotificationService.scheduleHighPriorityWakeAlert(
+                '🔔 Star Hospital: Token A-102 Call-Now',
+                'Dr. Amit Sharma is ready for you in OPD Room 101. Please proceed immediately.',
+                'opd_tokens',
+                { category: 'opd_token' }
+              );
+              setNotifications((prev) => [
+                {
+                  id: `test-${Date.now()}`,
+                  category: 'opd_token',
+                  title: '🔔 Test Screen-Wake Alert: Token A-102',
+                  body: 'Dr. Amit Sharma is ready for you in OPD Room 101.',
+                  read: false,
+                  createdAt: 'Just now',
+                  dataPayload: { route: 'OPDToken' },
+                },
+                ...prev,
+              ]);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Test Push Alert"
+          >
+            <Text style={styles.testAlertText}>Test Push</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.markReadBtn}
+            onPress={handleMarkAllRead}
+            accessibilityRole="button"
+            accessibilityLabel="Mark all as read"
+          >
+            <Check size={16} color="#0866C6" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -245,6 +275,17 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
     backgroundColor: '#EBF4FF',
+  },
+  testAlertBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#0866C6',
+  },
+  testAlertText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   scrollContent: {
     paddingHorizontal: 18,

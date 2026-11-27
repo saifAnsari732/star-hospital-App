@@ -18,6 +18,8 @@ export interface QueueVoiceAnnouncement {
   timestamp: string;
 }
 
+import * as Speech from 'expo-speech';
+
 class VoiceQueueAnnouncementService {
   private isVoiceSupported: boolean = false;
 
@@ -30,43 +32,82 @@ class VoiceQueueAnnouncementService {
       this.isVoiceSupported = true;
       return true;
     }
-    return false;
+    return true; // expo-speech supported on native
   }
 
   /**
-   * Speak announcement text using Web Speech API or device TTS with optimal Hindi/English voice
+   * Speak announcement text with High-Quality Female Hindi Voice across Web & Mobile
    */
   async speak(text: string, lang: 'hi-IN' | 'en-IN' | 'en-US' = 'hi-IN'): Promise<void> {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      logger.info('voiceAnnouncement', 'TTS not available in this environment', { text });
-      return;
-    }
-
     try {
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
-      utterance.rate = 0.92; // Slightly slowed for hospital clarity
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-
-      // Select natural Indian or Hindi voice if available
-      const voices = window.speechSynthesis.getVoices();
-      const targetVoice = voices.find(
-        (v) =>
-          v.lang.toLowerCase().includes(lang.toLowerCase()) ||
-          v.lang.toLowerCase().includes('hi') ||
-          v.name.toLowerCase().includes('india') ||
-          v.name.toLowerCase().includes('hindi')
-      );
-      if (targetVoice) {
-        utterance.voice = targetVoice;
+      // 1. Play smooth hospital chime before speaking announcement
+      if (typeof window !== 'undefined' && (window as any).AudioContext) {
+        try {
+          const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 chime
+          osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5 chime
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        } catch {
+          // AudioContext silent fallback
+        }
       }
 
-      window.speechSynthesis.speak(utterance);
-      logger.info('voiceAnnouncement', 'Speech utterance started', { text, lang });
+      // 2. Native Mobile Runtime (iOS & Android): Uses Expo Speech with Indian Hindi Female Voice
+      if (Platform.OS !== 'web') {
+        await Speech.stop();
+        await Speech.speak(text, {
+          language: lang,
+          pitch: 1.15, // Natural feminine pitch
+          rate: 0.90,  // Clear broadcast hospital rate
+          voice: undefined,
+        });
+        logger.info('voiceAnnouncement', 'Native Expo-Speech utterance started', { text, lang });
+        return;
+      }
+
+      // 3. Web Browser Runtime: Target Indian Hindi Female voice (e.g. Google हिन्दी, Kalpana, Heera, Microsoft Swara)
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+        utterance.rate = 0.90; // Optimal speed for hospital hall announcements
+        utterance.pitch = 1.18; // Crisp pleasant female pitch
+        utterance.volume = 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+        
+        // Priority search for Female Hindi & Indian voices
+        const femaleHindiVoice = voices.find((v) => {
+          const name = v.name.toLowerCase();
+          const vLang = v.lang.toLowerCase();
+          const isHindi = vLang.includes('hi') || name.includes('hindi') || name.includes('हिन्दी');
+          const isFemale = name.includes('female') || name.includes('swara') || name.includes('kalpana') || name.includes('heera') || name.includes('priya') || name.includes('geeta');
+          return isHindi && isFemale;
+        }) || voices.find((v) => {
+          const name = v.name.toLowerCase();
+          const vLang = v.lang.toLowerCase();
+          return vLang.includes('hi') || name.includes('hindi') || name.includes('हिन्दी');
+        }) || voices.find((v) => {
+          const name = v.name.toLowerCase();
+          return name.includes('female') || name.includes('zira') || name.includes('samantha');
+        });
+
+        if (femaleHindiVoice) {
+          utterance.voice = femaleHindiVoice;
+          logger.info('voiceAnnouncement', 'Selected female voice for speech', { name: femaleHindiVoice.name });
+        }
+
+        window.speechSynthesis.speak(utterance);
+        logger.info('voiceAnnouncement', 'Web Speech utterance started', { text, lang });
+      }
     } catch (err) {
       logger.warn('voiceAnnouncement', 'Speech synthesis error', { err });
     }

@@ -40,6 +40,8 @@ export type StaffPermission =
   | 'billing:payments_record'
   | 'billing:payment_history'
   | 'billing:receipts'
+  | 'payments:transactions'
+  | 'payments:refund'
   | 'tasks:view'
   | 'notifications:view'
   | 'settings:view';
@@ -112,6 +114,8 @@ export const STAFF_DESIGNATION_PERMISSIONS: Record<
     'billing:payments_record',
     'billing:payment_history',
     'billing:receipts',
+    'payments:transactions',
+    'payments:refund',
   ],
   admin: [
     ...COMMON_PERMISSIONS,
@@ -145,6 +149,8 @@ export const STAFF_DESIGNATION_PERMISSIONS: Record<
     'billing:payments_record',
     'billing:payment_history',
     'billing:receipts',
+    'payments:transactions',
+    'payments:refund',
   ],
 };
 
@@ -221,6 +227,7 @@ export const STAFF_ROUTE_PERMISSIONS: Record<string, StaffPermission> = {
   PharmacyDispense: 'pharmacy:worklist',
   BillingInvoice: 'billing:invoices_list',
   StaffPaymentHistory: 'billing:payment_history',
+  StaffPaymentTransactions: 'payments:transactions',
   AdmissionBed: 'beds:view',
   StaffDischarge: 'beds:discharge',
   StaffNotifications: 'notifications:view',

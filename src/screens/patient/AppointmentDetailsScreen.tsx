@@ -301,6 +301,20 @@ export const AppointmentDetailsScreen: React.FC<Props> = ({ navigation, route })
               />
             )}
 
+            {canModify && appointment.paymentStatus !== 'paid' && (
+              <StarButton
+                title="Pay Consultation Online (Razorpay)"
+                onPress={() =>
+                  navigation.navigate('PaymentDetails', {
+                    module: 'appointment',
+                    moduleId: appointment.id,
+                  })
+                }
+                variant="primary"
+                fullWidth
+              />
+            )}
+
             {canModify && appointment.mode !== 'video' && (
               <StarButton
                 title={
@@ -311,6 +325,7 @@ export const AppointmentDetailsScreen: React.FC<Props> = ({ navigation, route })
                 onPress={handleGenerateToken}
                 loading={isActionLoading}
                 disabled={isActionLoading}
+                variant="outline"
                 fullWidth
               />
             )}

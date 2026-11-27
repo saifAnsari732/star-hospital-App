@@ -34,6 +34,8 @@ import { HealthRecordsScreen } from '../screens/patient/HealthRecordsScreen';
 import { BillsScreen } from '../screens/patient/BillsScreen';
 import { PaymentHistoryScreen } from '../screens/patient/PaymentHistoryScreen';
 import { PaymentDetailsScreen } from '../screens/patient/PaymentDetailsScreen';
+import { PaymentStatusScreen } from '../screens/patient/PaymentStatusScreen';
+import { PaymentReceiptScreen } from '../screens/patient/PaymentReceiptScreen';
 import { AdmissionsScreen } from '../screens/patient/AdmissionsScreen';
 import { VideoConsultationScreen } from '../screens/patient/VideoConsultationScreen';
 import { EditProfileScreen } from '../screens/patient/EditProfileScreen';
@@ -41,27 +43,28 @@ import { HelpSupportScreen } from '../screens/patient/HelpSupportScreen';
 import { ContactHospitalScreen } from '../screens/patient/ContactHospitalScreen';
 import { SettingsScreen } from '../screens/patient/SettingsScreen';
 import { ChangePasswordScreen } from '../screens/patient/ChangePasswordScreen';
+import { StaffOPDQueueScreen } from '../screens/staff/StaffOPDQueueScreen';
 
 const Tab = createBottomTabNavigator<PatientTabParamList>();
 const Stack = createNativeStackNavigator<PatientStackParamList>();
 
 export const PatientTabNavigator: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 16);
+  const bottomPad = Math.max(insets.bottom, 8);
 
   return (
     <Tab.Navigator
       initialRouteName="HomeTab"
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#0866C6',
+        tabBarActiveTintColor: '#12344D',
         tabBarInactiveTintColor: '#94A3B8',
         tabBarStyle: [
           styles.tabBar,
           {
-            height: 58 + bottomPad,
+            height: 60 + bottomPad,
             paddingBottom: bottomPad,
-            paddingTop: 8,
+            paddingTop: 6,
           },
         ],
         tabBarLabelStyle: styles.tabBarLabel,
@@ -119,6 +122,7 @@ export const PatientNavigator: React.FC = () => {
       })}
     >
       <Stack.Screen name="PatientTabs" component={PatientTabNavigator} />
+      <Stack.Screen name="StaffOPDQueue" component={StaffOPDQueueScreen as any} />
       <Stack.Screen name="OPDToken" component={OPDTokenScreen as any} />
       <Stack.Screen name="QueueStatus" component={QueueStatusScreen as any} />
       <Stack.Screen name="FindDoctors" component={DoctorsScreen as any} />
@@ -144,6 +148,8 @@ export const PatientNavigator: React.FC = () => {
       <Stack.Screen name="Bills" component={BillsScreen as any} />
       <Stack.Screen name="PaymentHistory" component={PaymentHistoryScreen as any} />
       <Stack.Screen name="PaymentDetails" component={PaymentDetailsScreen as any} />
+      <Stack.Screen name="PaymentStatus" component={PaymentStatusScreen as any} />
+      <Stack.Screen name="PaymentReceipt" component={PaymentReceiptScreen as any} />
       <Stack.Screen name="Admissions" component={AdmissionsScreen as any} />
       <Stack.Screen name="VideoConsultation" component={VideoConsultationScreen as any} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen as any} />

@@ -31,14 +31,7 @@ export const DoctorCard: React.FC<DoctorCardProps> = ({
         <Image source={avatarSource} style={styles.avatar} resizeMode="cover" />
       </View>
 
-      <TouchableOpacity
-        style={styles.infoContainer}
-        activeOpacity={onPress ? 0.7 : 1}
-        onPress={onPress}
-        disabled={!onPress}
-        accessibilityRole="button"
-        accessibilityLabel={`View profile of ${doctor.name}`}
-      >
+      <View style={styles.infoContainer}>
         <Text style={styles.doctorName} numberOfLines={1}>
           {doctor.name}
         </Text>
@@ -56,7 +49,7 @@ export const DoctorCard: React.FC<DoctorCardProps> = ({
             <Text style={styles.ratingText}>{doctor.rating.toFixed(1)}</Text>
           </View>
         )}
-      </TouchableOpacity>
+      </View>
 
       {hasInteractiveBookButton ? (
         <TouchableOpacity

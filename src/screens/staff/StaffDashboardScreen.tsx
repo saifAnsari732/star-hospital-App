@@ -272,6 +272,15 @@ export const StaffDashboardScreen: React.FC<{ navigation: any }> = ({
       icon: <CreditCard size={20} color="#16A34A" />,
     },
     {
+      key: 'paytxns',
+      label: 'Razorpay Ledger',
+      subtitle: 'Transactions & Refunds',
+      route: 'StaffPaymentTransactions',
+      color: '#12344D',
+      bgColor: '#F0FDF4',
+      icon: <CreditCard size={20} color="#18A999" />,
+    },
+    {
       key: 'beds',
       label: canonical === 'nurse' ? 'Bed Availability' : 'Ward Admissions',
       subtitle:
@@ -380,154 +389,6 @@ export const StaffDashboardScreen: React.FC<{ navigation: any }> = ({
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
-
-        {/* 4 Full-Width Stacked Colored KPI Cards Matching Reference UI Image */}
-        <Text style={styles.sectionTitle}>Staff Dashboard</Text>
-        <View style={{ gap: 10, marginBottom: 18 }}>
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: '#E0F2FE',
-              borderRadius: 16,
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#BAE6FD',
-            }}
-            onPress={() => navigation.navigate('StaffTabs', { screen: 'StaffPatientsTab' })}
-            activeOpacity={0.85}
-          >
-            <View
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: 12,
-                backgroundColor: '#0866C6',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: 14,
-              }}
-            >
-              <Users size={22} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#0369A1' }}>
-                Total Patients
-              </Text>
-              <Text style={{ fontSize: 22, fontWeight: '800', color: '#142D4E', marginTop: 2 }}>
-                {kpis?.totalPatients?.toLocaleString() || '1,250'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: '#DCFCE7',
-              borderRadius: 16,
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#BBF7D0',
-            }}
-            onPress={() => navigation.navigate('StaffOPDQueue')}
-            activeOpacity={0.85}
-          >
-            <View
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: 12,
-                backgroundColor: '#16A34A',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: 14,
-              }}
-            >
-              <Activity size={22} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#15803D' }}>
-                Today OPD
-              </Text>
-              <Text style={{ fontSize: 22, fontWeight: '800', color: '#142D4E', marginTop: 2 }}>
-                {kpis?.todayOpd ?? 320}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: '#FEF3C7',
-              borderRadius: 16,
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#FDE68A',
-            }}
-            onPress={() => navigation.navigate('StaffAppointmentManage')}
-            activeOpacity={0.85}
-          >
-            <View
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: 12,
-                backgroundColor: '#D97706',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: 14,
-              }}
-            >
-              <Calendar size={22} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#B45309' }}>
-                Appointments
-              </Text>
-              <Text style={{ fontSize: 22, fontWeight: '800', color: '#142D4E', marginTop: 2 }}>
-                {kpis?.todayAppointments ?? 280}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: '#EDE9FE',
-              borderRadius: 16,
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#DDD6FE',
-            }}
-            onPress={() => navigation.navigate('LabEntry')}
-            activeOpacity={0.85}
-          >
-            <View
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: 12,
-                backgroundColor: '#7C3AED',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginRight: 14,
-              }}
-            >
-              <FlaskConical size={22} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#6D28D9' }}>
-                Reports
-              </Text>
-              <Text style={{ fontSize: 22, fontWeight: '800', color: '#142D4E', marginTop: 2 }}>
-                {pendingLabCount ?? kpis?.reports ?? 180}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
 
         {/* Admin Role Assignment Panel: Decide Doctor / Staff / Patient Roles */}
         {canonical === 'admin' ? (
@@ -1015,28 +876,38 @@ export const StaffDashboardScreen: React.FC<{ navigation: any }> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F5F9FF',
+    backgroundColor: '#F4F7FB',
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 36,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 40,
+    maxWidth: 1080,
+    width: '100%',
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   welcomeSub: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '500',
     color: '#64748B',
+    marginTop: 2,
   },
   staffName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#142D4E',
-    marginTop: 2,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#12344D',
+    letterSpacing: -0.3,
   },
   badgeWrap: {
     marginTop: 6,

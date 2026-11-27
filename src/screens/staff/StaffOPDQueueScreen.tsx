@@ -262,12 +262,8 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
       <StarHeader
-        title="OPD Queue Control Center"
-        subtitle={
-          canManageQueue
-            ? 'Autonomous Queue Engine, Live Voice & Patient Payments'
-            : 'Live OPD Queue & Realtime DB Monitor'
-        }
+        title="OPD Queue &amp; Ledger"
+        subtitle="Real-time Patient Queue &amp; Collections"
         onBackPress={() => navigation.goBack()}
         rightAction={
           canGenerateToken ? (
@@ -282,12 +278,14 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
       />
 
       {/* Main Tab Switcher: Queue Control vs Patient Payment Ledger */}
+      {/* Segmented Control Bar */}
       <View style={styles.mainTabRow}>
         <TouchableOpacity
           style={[styles.mainTabBtn, activeMainTab === 'queue' && styles.mainTabBtnActive]}
           onPress={() => setActiveMainTab('queue')}
+          activeOpacity={0.8}
         >
-          <Users size={15} color={activeMainTab === 'queue' ? '#FFFFFF' : '#475569'} />
+          <Users size={14} color={activeMainTab === 'queue' ? '#0866C6' : '#64748B'} />
           <Text style={[styles.mainTabBtnText, activeMainTab === 'queue' && styles.mainTabBtnTextActive]}>
             OPD Live Queue
           </Text>
@@ -296,35 +294,39 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
         <TouchableOpacity
           style={[styles.mainTabBtn, activeMainTab === 'payments' && styles.mainTabBtnActive]}
           onPress={() => setActiveMainTab('payments')}
+          activeOpacity={0.8}
         >
-          <CreditCard size={15} color={activeMainTab === 'payments' ? '#FFFFFF' : '#475569'} />
+          <CreditCard size={14} color={activeMainTab === 'payments' ? '#0866C6' : '#64748B'} />
           <Text style={[styles.mainTabBtnText, activeMainTab === 'payments' && styles.mainTabBtnTextActive]}>
-            Patient ID & Payment Ledger
+            Payment Ledger
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Doctor Selector Strip */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.docStrip}
-      >
-        {doctors.map((d) => {
-          const active = selectedDoctorId === d.id;
-          return (
-            <TouchableOpacity
-              key={d.id}
-              style={[styles.docChip, active && styles.docChipActive]}
-              onPress={() => setSelectedDoctorId(d.id)}
-            >
-              <Text style={[styles.docChipText, active && styles.docChipTextActive]}>
-                {d.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      {/* Doctor Filter Horizontal Chips */}
+      <View style={{ marginBottom: 12 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.docStripContent}
+        >
+          {doctors.map((d) => {
+            const active = selectedDoctorId === d.id;
+            return (
+              <TouchableOpacity
+                key={d.id}
+                style={[styles.docChip, active && styles.docChipActive]}
+                onPress={() => setSelectedDoctorId(d.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.docChipText, active && styles.docChipTextActive]}>
+                  {d.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {activeMainTab === 'queue' ? (
         <ScrollView
@@ -340,49 +342,36 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
             />
           }
         >
-          {/* Autonomous OPD Control Engine Card */}
+          {/* Beautiful Modern Autonomous OPD Control Engine Card */}
           <View style={styles.engineCard}>
+            {/* Top Engine Title & Toggle */}
             <View style={styles.engineHeader}>
               <View style={styles.engineTitleRow}>
                 <View style={styles.engineIconCircle}>
-                  <Bot size={18} color="#0866C6" />
+                  <Bot size={20} color="#0866C6" />
                 </View>
-                <View>
-                  <Text style={styles.engineTitle}>Autonomous OPD Queue Engine</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.engineTitle}>Autonomous OPD Engine</Text>
+                    <View style={[styles.pulseDot, { backgroundColor: isAutonomousActive ? '#16A34A' : '#94A3B8' }]} />
+                  </View>
                   <Text style={styles.engineSubtitle}>
-                    Auto-calls next token on timer expiration & fires voice alerts
+                    {isAutonomousActive ? 'AI Auto-Call & Voice Active' : 'Manual Operation Mode'}
                   </Text>
                 </View>
               </View>
               <Switch
                 value={isAutonomousActive}
                 onValueChange={(val) => setIsAutonomousActive(val)}
-                trackColor={{ false: '#CBD5E1', true: '#93C5FD' }}
+                trackColor={{ false: '#E2E8F0', true: '#93C5FD' }}
                 thumbColor={isAutonomousActive ? '#0866C6' : '#94A3B8'}
               />
             </View>
 
-            {/* Status & Duration Selector */}
+            {/* Slot Limit Duration Pills */}
             <View style={styles.engineConfigRow}>
-              <View style={styles.engineBadge}>
-                <View
-                  style={[
-                    styles.pulseDot,
-                    { backgroundColor: isAutonomousActive ? '#16A34A' : '#94A3B8' },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.engineBadgeText,
-                    { color: isAutonomousActive ? '#16A34A' : '#64748B' },
-                  ]}
-                >
-                  {isAutonomousActive ? 'ENGINE RUNNING (AUTO-CALL ON)' : 'MANUAL DESK MODE'}
-                </Text>
-              </View>
-
+              <Text style={styles.durationLabel}>Consultation Limit:</Text>
               <View style={styles.durationSelector}>
-                <Text style={styles.durationLabel}>Slot Limit:</Text>
                 {[5, 10, 15].map((m) => (
                   <TouchableOpacity
                     key={m}
@@ -394,6 +383,7 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
                       setSlotDurationMinutes(m);
                       setRemainingSeconds(m * 60);
                     }}
+                    activeOpacity={0.8}
                   >
                     <Text
                       style={[
@@ -401,31 +391,31 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
                         slotDurationMinutes === m && styles.durationPillTextActive,
                       ]}
                     >
-                      {m}m
+                      {m} min
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
 
-            {/* Live Serving Consultation Countdown Bar */}
+            {/* Now Serving Chamber Box (Hero Card) */}
             <View style={styles.liveConsultationBox}>
               <View style={styles.liveConsultationHeader}>
-                <View>
-                  <Text style={styles.liveConsultationLabel}>NOW SERVING IN CHAMBER</Text>
-                  <Text style={styles.liveConsultationName}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.liveConsultationLabel}>CURRENT CONSULTATION</Text>
+                  <Text style={styles.liveConsultationName} numberOfLines={1}>
                     {activeConsultationToken
                       ? `${activeConsultationToken.tokenNumber} • ${activeConsultationToken.patientName}`
-                      : 'Consultation Room Idle (No Patient Inside)'}
+                      : 'Chamber Idle • Waiting for Call'}
                   </Text>
                 </View>
                 <View style={styles.timerBadge}>
-                  <Clock size={14} color="#0866C6" />
+                  <Clock size={13} color="#0866C6" />
                   <Text style={styles.timerText}>{formatTimer(remainingSeconds)}</Text>
                 </View>
               </View>
 
-              {/* Progress Bar */}
+              {/* Smooth Animated Progress Bar */}
               <View style={styles.progressBarBg}>
                 <View
                   style={[
@@ -445,52 +435,50 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
                 />
               </View>
 
-              <Text style={styles.autoAdvanceNote}>
-                {isAutonomousActive
-                  ? `⚡ Auto-advances queue and alerts next patient when timer reaches 00:00.`
-                  : `⏸️ Automatic advance is paused. Click Advance Patient below to call.`}
-              </Text>
-
-              {/* Engine Quick Action Buttons */}
+              {/* Action Buttons Grid (Clean 2x2 Layout) */}
               <View style={styles.engineActionsRow}>
                 <TouchableOpacity
-                  style={styles.engineActionBtn}
+                  style={[styles.engineActionBtn, { flex: 1 }]}
                   onPress={handleCallNext}
+                  activeOpacity={0.8}
                 >
-                  <PhoneCall size={13} color="#FFFFFF" />
-                  <Text style={styles.engineActionBtnText}>Call Next Now</Text>
+                  <PhoneCall size={14} color="#FFFFFF" />
+                  <Text style={styles.engineActionBtnText}>Call Next</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.engineActionBtnOutline}
+                  style={[styles.engineActionBtnOutline, { flex: 1 }]}
                   onPress={handleExtendFiveMins}
+                  activeOpacity={0.8}
                 >
-                  <Clock size={13} color="#0866C6" />
+                  <Clock size={14} color="#0866C6" />
                   <Text style={styles.engineActionBtnOutlineText}>+5 Mins</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.engineActionBtnOutline}
+                  style={[styles.engineActionBtnOutline, { flex: 1 }]}
                   onPress={handleTestVoiceAnnouncement}
+                  activeOpacity={0.8}
                 >
-                  <Volume2 size={13} color="#0866C6" />
-                  <Text style={styles.engineActionBtnOutlineText}>Test Hindi Voice</Text>
+                  <Volume2 size={14} color="#0866C6" />
+                  <Text style={styles.engineActionBtnOutlineText}>Hindi Voice</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.engineActionBtnDoctor}
+                  style={[styles.engineActionBtnDoctor, { flex: 1 }]}
                   onPress={handleDoctorDutyArrivalAnnouncement}
+                  activeOpacity={0.8}
                 >
-                  <Sparkles size={13} color="#D97706" />
-                  <Text style={styles.engineActionBtnDoctorText}>Doctor Arrived</Text>
+                  <Sparkles size={14} color="#B45309" />
+                  <Text style={styles.engineActionBtnDoctorText}>Arrived</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Voice Announcement Broadcast Log */}
+            {/* Realtime Hindi Voice Announcement Notification Banner */}
             {voiceAnnouncementLog ? (
               <View style={styles.logCard}>
-                <Volume2 size={14} color="#0866C6" />
+                <Volume2 size={16} color="#15803D" />
                 <Text style={styles.logText} numberOfLines={2}>
                   {voiceAnnouncementLog}
                 </Text>
@@ -657,41 +645,64 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
             />
           }
         >
-          {/* Ledger Summary Cards */}
+          {/* Premium Modern Ledger Summary Card */}
           <View style={styles.ledgerSummaryCard}>
             <View style={styles.ledgerHeaderRow}>
-              <View>
-                <Text style={styles.ledgerSubtitle}>OPD CONSULTATION ACCOUNTS LEDGER</Text>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <CreditCard size={14} color="#93C5FD" />
+                  <Text style={styles.ledgerSubtitle}>CONSULTATION COLLECTIONS</Text>
+                </View>
                 <Text style={styles.ledgerTotalAmount}>₹{totalLedgerAmount.toLocaleString('en-IN')}.00</Text>
               </View>
               <View style={styles.realtimeShieldBadge}>
-                <ShieldCheck size={16} color="#16A34A" />
-                <Text style={styles.realtimeShieldText}>Dual Firebase RTDB Synced</Text>
+                <ShieldCheck size={13} color="#4ADE80" />
+                <Text style={styles.realtimeShieldText}>Live Ledger</Text>
               </View>
             </View>
-            <Text style={styles.ledgerExplainer}>
-              Every appointment booking and walk-in token is automatically recorded and tied permanently to the Patient ID & MRN.
-            </Text>
+            <View style={styles.ledgerDivider} />
+            <View style={styles.ledgerMetricsRow}>
+              <View style={styles.ledgerMetricCol}>
+                <Text style={styles.ledgerMetricSubLabel}>TRANSACTIONS</Text>
+                <Text style={styles.ledgerMetricVal}>{payments.length}</Text>
+              </View>
+              <View style={styles.ledgerMetricDivider} />
+              <View style={styles.ledgerMetricCol}>
+                <Text style={styles.ledgerMetricSubLabel}>AVG / PATIENT</Text>
+                <Text style={styles.ledgerMetricVal}>₹{payments.length ? Math.round(totalLedgerAmount / payments.length) : 0}</Text>
+              </View>
+              <View style={styles.ledgerMetricDivider} />
+              <View style={styles.ledgerMetricCol}>
+                <Text style={styles.ledgerMetricSubLabel}>SETTLEMENT</Text>
+                <Text style={[styles.ledgerMetricVal, { color: '#4ADE80' }]}>100%</Text>
+              </View>
+            </View>
           </View>
 
-          {/* Payment Items List */}
-          <Text style={styles.sectionHeaderTitle}>Patient Payment Records</Text>
+          {/* Payment Items List Header */}
+          <View style={styles.ledgerListHeader}>
+            <Text style={styles.sectionHeaderTitle}>Patient Payment Records</Text>
+            <View style={styles.recordsCountBadge}>
+              <Text style={styles.recordsCountText}>{payments.length} Records</Text>
+            </View>
+          </View>
+
           {payments.map((p) => (
             <View key={p.id} style={styles.paymentCard}>
               <View style={styles.paymentCardHeader}>
                 <View style={styles.paymentTokenBadge}>
                   <Text style={styles.paymentTokenText}>{p.tokenNumber || 'TOKEN'}</Text>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, paddingHorizontal: 4 }}>
                   <Text style={styles.paymentPatientName}>{p.patientName}</Text>
                   <Text style={styles.paymentPatientMeta}>
-                    Patient ID: <Text style={styles.boldText}>{p.patientId}</Text> • MRN: <Text style={styles.boldText}>{p.patientMrn}</Text>
+                    ID: <Text style={styles.boldText}>{p.patientId}</Text>  •  MRN: <Text style={styles.boldText}>{p.patientMrn}</Text>
                   </Text>
                 </View>
                 <View style={styles.paymentAmountBox}>
                   <Text style={styles.paymentAmountText}>₹{p.amount}</Text>
                   <View style={styles.paidPill}>
-                    <CheckCircle2 size={10} color="#16A34A" />
+                    <CheckCircle2 size={10} color="#15803D" />
                     <Text style={styles.paidPillText}>PAID</Text>
                   </View>
                 </View>
@@ -699,17 +710,27 @@ export const StaffOPDQueueScreen: React.FC<{ navigation: any }> = ({
 
               <View style={styles.paymentDivider} />
 
-              <View style={styles.paymentCardFooter}>
-                <View>
-                  <Text style={styles.paymentFooterLabel}>Method & Reference:</Text>
-                  <Text style={styles.paymentFooterValue}>
-                    {p.paymentMethod} • {p.transactionRef}
+              {/* Clean Structured Footer Details */}
+              <View style={styles.paymentDetailsContainer}>
+                <View style={styles.paymentDetailRow}>
+                  <Text style={styles.paymentFooterLabel}>PAYMENT METHOD</Text>
+                  <View style={styles.methodBadge}>
+                    <CreditCard size={11} color="#0866C6" />
+                    <Text style={styles.methodBadgeText}>{p.paymentMethod}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.paymentDetailRow}>
+                  <Text style={styles.paymentFooterLabel}>TRANSACTION REF</Text>
+                  <Text style={styles.txRefMono}>
+                    {p.transactionRef}
                   </Text>
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.paymentFooterLabel}>Doctor & Dept:</Text>
-                  <Text style={styles.paymentFooterValue}>
-                    {p.doctorName} ({p.department})
+
+                <View style={styles.paymentDetailRow}>
+                  <Text style={styles.paymentFooterLabel}>ATTENDING DOCTOR</Text>
+                  <Text style={styles.attendingDoctorText}>
+                    {p.doctorName}
                   </Text>
                 </View>
               </View>
@@ -736,9 +757,11 @@ const styles = StyleSheet.create({
   },
   mainTabRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 8,
+    marginHorizontal: 16,
     marginVertical: 10,
+    padding: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 12,
   },
   mainTabBtn: {
     flex: 1,
@@ -746,47 +769,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#E2E8F0',
+    paddingVertical: 9,
+    borderRadius: 9,
+    backgroundColor: 'transparent',
   },
   mainTabBtnActive: {
-    backgroundColor: '#0866C6',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   mainTabBtnText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#475569',
+    fontWeight: '600',
+    color: '#64748B',
   },
   mainTabBtnTextActive: {
-    color: '#FFFFFF',
+    color: '#0866C6',
+    fontWeight: '700',
   },
-  docStrip: {
+  docStripContent: {
     paddingHorizontal: 16,
-    maxHeight: 44,
-    marginBottom: 10,
+    gap: 8,
   },
   docChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 999,
+    borderRadius: 20,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginRight: 8,
-    alignSelf: 'center',
   },
   docChipActive: {
-    backgroundColor: '#142D4E',
-    borderColor: '#142D4E',
+    backgroundColor: '#0866C6',
+    borderColor: '#0866C6',
+    shadowColor: '#0866C6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   docChipText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#475569',
   },
   docChipTextActive: {
     color: '#FFFFFF',
+    fontWeight: '700',
   },
   scrollContent: {
     paddingHorizontal: 16,
@@ -794,15 +826,16 @@ const styles = StyleSheet.create({
   },
   engineCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: '#E2E8F0',
     marginBottom: 14,
     shadowColor: '#0866C6',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowRadius: 10,
+    elevation: 2,
   },
   engineHeader: {
     flexDirection: 'row',
@@ -816,22 +849,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   engineIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
   engineTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#142D4E',
+    color: '#0F172A',
   },
   engineSubtitle: {
     fontSize: 11,
     color: '#64748B',
     marginTop: 2,
+    fontWeight: '500',
   },
   engineConfigRow: {
     flexDirection: 'row',
@@ -852,26 +888,20 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  engineBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
   durationSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   durationLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
-    marginRight: 4,
+    color: '#475569',
   },
   durationPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     backgroundColor: '#F1F5F9',
   },
   durationPillActive: {
@@ -879,17 +909,18 @@ const styles = StyleSheet.create({
   },
   durationPillText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
+    fontWeight: '600',
+    color: '#64748B',
   },
   durationPillTextActive: {
     color: '#FFFFFF',
+    fontWeight: '700',
   },
   liveConsultationBox: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 12,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -897,27 +928,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
   liveConsultationLabel: {
     fontSize: 10,
     fontWeight: '800',
     color: '#0866C6',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   liveConsultationName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1E293B',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
     marginTop: 2,
   },
   timerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#EFF6FF',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
   timerText: {
     fontSize: 13,
@@ -926,10 +960,10 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   progressBarBg: {
-    height: 6,
+    height: 5,
     borderRadius: 3,
     backgroundColor: '#E2E8F0',
-    marginTop: 10,
+    marginTop: 12,
     overflow: 'hidden',
   },
   progressBarFill: {
@@ -937,62 +971,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#0866C6',
     borderRadius: 3,
   },
-  autoAdvanceNote: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
   engineActionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 10,
+    gap: 8,
+    marginTop: 12,
   },
   engineActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'center',
+    gap: 6,
     backgroundColor: '#0866C6',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    shadowColor: '#0866C6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   engineActionBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   engineActionBtnOutline: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 8,
+    borderColor: '#CBD5E1',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
   engineActionBtnOutlineText: {
-    color: '#0866C6',
-    fontSize: 11,
-    fontWeight: '700',
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '600',
   },
   engineActionBtnDoctor: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'center',
+    gap: 6,
     backgroundColor: '#FEF3C7',
     borderWidth: 1,
     borderColor: '#FDE68A',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
   engineActionBtnDoctorText: {
-    color: '#92400E',
-    fontSize: 11,
+    color: '#B45309',
+    fontSize: 12,
     fontWeight: '700',
   },
   logCard: {
@@ -1002,29 +1038,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0FDF4',
     borderColor: '#BBF7D0',
     borderWidth: 1,
-    padding: 9,
-    borderRadius: 8,
-    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 12,
   },
   logText: {
-    fontSize: 11,
-    color: '#166534',
+    fontSize: 12,
+    color: '#15803D',
     fontWeight: '600',
     flex: 1,
   },
   metricsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   metricCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    padding: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   metricVal: {
     fontSize: 18,
@@ -1043,16 +1085,16 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   filterPill: {
-    paddingHorizontal: 11,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
   },
   filterPillActive: {
-    backgroundColor: '#142D4E',
-    borderColor: '#142D4E',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   filterText: {
     fontSize: 11,
@@ -1069,6 +1111,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     marginBottom: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   tokenCardServing: {
     borderColor: '#86EFAC',
@@ -1097,7 +1144,7 @@ const styles = StyleSheet.create({
   patientName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#142D4E',
+    color: '#0F172A',
   },
   nextInLineBadge: {
     flexDirection: 'row',
@@ -1151,82 +1198,138 @@ const styles = StyleSheet.create({
   },
   // Ledger Styles
   ledgerSummaryCard: {
-    backgroundColor: '#142D4E',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
+    backgroundColor: '#0F172A',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 3,
   },
   ledgerHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: 8,
   },
   ledgerSubtitle: {
     fontSize: 10,
     fontWeight: '800',
     color: '#93C5FD',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   ledgerTotalAmount: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '900',
     color: '#FFFFFF',
-    marginTop: 4,
+    letterSpacing: -0.5,
   },
   realtimeShieldBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#1E3A8A',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: 'rgba(22, 163, 74, 0.18)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(74, 222, 128, 0.35)',
   },
   realtimeShieldText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#4ADE80',
   },
-  ledgerExplainer: {
-    fontSize: 11,
-    color: '#CBD5E1',
-    marginTop: 10,
-    lineHeight: 16,
+  ledgerDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: 14,
   },
-  sectionHeaderTitle: {
+  ledgerMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ledgerMetricCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  ledgerMetricDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  ledgerMetricSubLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+  },
+  ledgerMetricVal: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1E293B',
-    marginBottom: 10,
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  ledgerListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  recordsCountBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  recordsCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
   },
   paymentCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   paymentCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   paymentTokenBadge: {
     backgroundColor: '#EFF6FF',
     paddingHorizontal: 9,
     paddingVertical: 7,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
   paymentTokenText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0866C6',
   },
   paymentPatientName: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#142D4E',
+    fontWeight: '800',
+    color: '#0F172A',
   },
   paymentPatientMeta: {
     fontSize: 11,
@@ -1235,7 +1338,7 @@ const styles = StyleSheet.create({
   },
   boldText: {
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#334155',
   },
   paymentAmountBox: {
     alignItems: 'flex-end',
@@ -1252,33 +1355,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#DCFCE7',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     marginTop: 2,
   },
   paidPillText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#166534',
+    color: '#15803D',
   },
   paymentDivider: {
     height: 1,
     backgroundColor: '#F1F5F9',
     marginVertical: 10,
   },
-  paymentCardFooter: {
+  paymentDetailsContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  paymentDetailRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
   paymentFooterLabel: {
     fontSize: 10,
-    color: '#94A3B8',
-    fontWeight: '600',
+    color: '#64748B',
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
-  paymentFooterValue: {
+  methodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  methodBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0866C6',
+  },
+  txRefMono: {
     fontSize: 11,
     color: '#334155',
     fontWeight: '600',
-    marginTop: 2,
+    fontFamily: 'monospace',
+    letterSpacing: 0.5,
+  },
+  attendingDoctorText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0866C6',
   },
 });
 

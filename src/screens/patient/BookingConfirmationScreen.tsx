@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -18,13 +18,20 @@ import {
   CreditCard,
   FileCheck,
   AlertCircle,
+  ShieldCheck,
+  Sparkles,
+  Receipt,
 } from 'lucide-react-native';
 import { useOPDToken } from '../../context/OPDTokenContext';
 import { appointmentService } from '../../services/appointmentService';
 import { doctorService } from '../../services/doctorService';
 import { patientService } from '../../services/patientService';
+import { razorpayService } from '../../services/razorpayService';
+import { voiceQueueAnnouncementService } from '../../services/voiceQueueAnnouncementService';
 import { useAuth } from '../../context/AuthContext';
-import { formatCurrencyPKR, resolveEffectivePatientId } from './patientUtils';
+import { OPDToken } from '../../types/opdToken';
+import { colors } from '../../theme/colors';
+import { resolveEffectivePatientId } from './patientUtils';
 
 export interface BookingConfirmationScreenProps {
   navigation: any;
@@ -55,7 +62,7 @@ export const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps>
   const doctorName = route.params?.doctorName || 'Dr. Amit Sharma';
   const department = route.params?.department || 'General Physician';
   const doctorId = route.params?.doctorId || 'doc-1';
-  const date = route.params?.date || '2026-11-15';
+  const date = route.params?.date || new Date().toISOString().split('T')[0];
   const time = route.params?.time || '09:30 AM';
   const mode = route.params?.mode || 'in_person';
   const patientName = user?.name || 'Patient';
@@ -95,17 +102,50 @@ export const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps>
     };
   }, [doctorId, route.params?.consultationFee]);
 
-  const [bookingStatus, setBookingStatus] = useState<'booking' | 'confirmed' | 'error'>(
-    route.params?.appointmentId ? 'confirmed' : 'booking'
-  );
+  // Never auto-confirm an appointment without verified payment
+  const [bookingStatus, setBookingStatus] = useState<
+    'awaiting_payment' | 'processing' | 'confirmed' | 'error'
+  >(route.params?.appointmentId ? 'confirmed' : 'awaiting_payment');
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookedId, setBookedId] = useState<string | undefined>(route.params?.appointmentId);
-  const bookingTriggeredRef = useRef<boolean>(false);
+  const [verifiedPaymentId, setVerifiedPaymentId] = useState<string | null>(null);
+  const [verifiedTxnId, setVerifiedTxnId] = useState<string | null>(null);
+  const [issuedToken, setIssuedToken] = useState<OPDToken | null>(null);
 
-  const attemptBooking = useCallback(async () => {
-    setBookingStatus('booking');
+  const handlePayAndConfirmBooking = useCallback(async () => {
+    setBookingStatus('processing');
     setBookingError(null);
     try {
+      // 1. Create Razorpay Order (server-computed fee) -> Checkout -> Verify Signature
+      const verification = await razorpayService.processPaymentForModule(
+        {
+          module: 'appointment',
+          moduleId: doctorId,
+          patientId: effectivePatientId,
+          notes: {
+            doctorId,
+            doctorName,
+            date,
+            time,
+            mode,
+            patientName,
+          },
+        },
+        {
+          name: patientName,
+          email: user?.email,
+          contact: user?.phone,
+        }
+      );
+
+      if (!verification.verified) {
+        throw new Error('Payment signature verification failed. Appointment was not booked.');
+      }
+
+      setVerifiedPaymentId(verification.paymentId);
+      setVerifiedTxnId(verification.transactionId);
+
+      // 2. Book & Confirm Appointment ONLY after payment verification succeeds
       const created = await appointmentService.bookAppointment({
         patientId: effectivePatientId,
         patientName,
@@ -116,33 +156,76 @@ export const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps>
         startTime: time,
         mode,
         remarks: route.params?.remarks,
+        paymentStatus: 'paid',
+        paymentId: verification.paymentId,
+        transactionId: verification.transactionId,
       });
+
       if (created?.id) {
         setBookedId(created.id);
       }
+
+      // 3. Automatically issue live OPD Token & trigger Hindi Female Voice Announcement
+      try {
+        const token = await generateToken(doctorId, 'opd_consultation', {
+          isPaid: true,
+          paymentAmount: verification.transaction?.amountPaid ?? consultationFee,
+          paymentId: verification.paymentId,
+        });
+        setIssuedToken(token);
+        void voiceQueueAnnouncementService.announceYourTurnNow(
+          token.tokenNumber,
+          patientName,
+          doctorName,
+          token.roomNo || 'Room 104'
+        );
+      } catch {
+        // Token generation fallback is non-fatal once appointment & payment succeed
+      }
+
       setBookingStatus('confirmed');
     } catch (err: any) {
       setBookingError(
-        err?.message || 'Unable to confirm appointment slot. Please retry or pick another slot.'
+        err?.message || 'Payment was not completed. Your appointment has NOT been booked.'
       );
       setBookingStatus('error');
     }
-  }, [effectivePatientId, doctorId, date, time, mode, route.params?.remarks]);
-
-  useEffect(() => {
-    if (route.params?.appointmentId || bookingTriggeredRef.current) return;
-    bookingTriggeredRef.current = true;
-    void attemptBooking();
-  }, [route.params?.appointmentId, attemptBooking]);
+  }, [
+    effectivePatientId,
+    patientName,
+    patientMrn,
+    doctorId,
+    doctorName,
+    date,
+    time,
+    mode,
+    route.params?.remarks,
+    user?.email,
+    user?.phone,
+    consultationFee,
+    generateToken,
+  ]);
 
   const bookingReference = bookedId?.toUpperCase() || 'PENDING';
 
   const handleGetOPDToken = async () => {
+    if (issuedToken) {
+      navigation.navigate('OPDToken', {
+        tokenId: issuedToken.id,
+        tokenNumber: issuedToken.tokenNumber,
+        doctorId: issuedToken.doctorId,
+      });
+      return;
+    }
     try {
-      await generateToken(doctorId, 'first_visit');
-      navigation.navigate('OPDToken');
+      const token = await generateToken(doctorId, 'first_visit');
+      navigation.navigate('OPDToken', {
+        tokenId: token.id,
+        tokenNumber: token.tokenNumber,
+        doctorId,
+      });
     } catch {
-      navigation.navigate('OPDToken');
+      navigation.navigate('StaffOPDQueue', { doctorId });
     }
   };
 
@@ -170,23 +253,40 @@ export const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps>
           <View style={[styles.stepConnector, styles.stepConnectorDone]} />
 
           <View style={styles.stepNodeContainer}>
-            <View style={[styles.stepCircle, styles.stepCircleActive]}>
-              <Text style={styles.stepNumberActive}>3</Text>
+            <View
+              style={[
+                styles.stepCircle,
+                bookingStatus === 'confirmed' ? styles.stepCircleDone : styles.stepCircleActive,
+              ]}
+            >
+              {bookingStatus === 'confirmed' ? (
+                <Text style={styles.stepCheck}>✓</Text>
+              ) : (
+                <Text style={styles.stepNumberActive}>3</Text>
+              )}
             </View>
-            <Text style={[styles.stepLabel, styles.stepLabelActive]}>Confirm</Text>
+            <Text style={[styles.stepLabel, styles.stepLabelActive]}>
+              {bookingStatus === 'confirmed' ? 'Confirmed' : 'Pay & Confirm'}
+            </Text>
           </View>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {bookingStatus === 'booking' ? (
-          <View style={[styles.summaryCard, { alignItems: 'center', paddingVertical: 38 }]}>
-            <ActivityIndicator size="large" color="#0866C6" />
-            <Text style={[styles.successTitle, { marginTop: 14, fontSize: 19 }]}>
-              Confirming Appointment...
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { maxWidth: 640, width: '100%', alignSelf: 'center' },
+        ]}
+      >
+        {bookingStatus === 'processing' ? (
+          <View style={[styles.summaryCard, { alignItems: 'center', paddingVertical: 42 }]}>
+            <ActivityIndicator size="large" color={colors.starTeal} />
+            <Text style={[styles.successTitle, { marginTop: 16, fontSize: 19, color: colors.starNavy }]}>
+              Verifying Razorpay Payment...
             </Text>
             <Text style={[styles.successSubtitle, { marginTop: 6 }]}>
-              Reserving {time} on {date} with {doctorName}.
+              Confirming your slot ({time} on {date}) with {doctorName} and issuing your live OPD token.
             </Text>
           </View>
         ) : bookingStatus === 'error' ? (
@@ -195,18 +295,21 @@ export const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps>
               <AlertCircle size={48} color="#DC2626" />
             </View>
             <Text style={[styles.successTitle, { color: '#DC2626' }]}>
-              Booking Could Not Complete
+              Payment Required to Confirm
             </Text>
             <Text style={styles.successSubtitle}>
-              {bookingError || 'The selected time slot could not be confirmed.'}
+              {bookingError || 'Payment was not completed. Your appointment has NOT been booked.'}
             </Text>
             <View style={[styles.actionsContainer, { width: '100%', marginTop: 20 }]}>
               <TouchableOpacity
-                style={styles.opdTokenButton}
-                onPress={() => void attemptBooking()}
+                style={[styles.opdTokenButton, { backgroundColor: colors.starNavy }]}
+                onPress={() => void handlePayAndConfirmBooking()}
                 activeOpacity={0.85}
               >
-                <Text style={styles.opdTokenButtonText}>Retry Booking</Text>
+                <CreditCard size={18} color="#FFFFFF" style={styles.btnIcon} />
+                <Text style={styles.opdTokenButtonText}>
+                  Retry Payment (₹{consultationFee.toLocaleString('en-IN')})
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.viewApptsButton}
@@ -219,124 +322,227 @@ export const BookingConfirmationScreen: React.FC<BookingConfirmationScreenProps>
           </View>
         ) : (
           <>
-        {/* Success Icon & Heading */}
-        <View style={styles.successHero}>
-          <View style={styles.successIconCircle}>
-            <CheckCircle2 size={54} color="#16A34A" strokeWidth={2.2} />
-          </View>
-          <Text style={styles.successTitle}>Booking Confirmed!</Text>
-          <Text style={styles.successSubtitle}>
-            Your appointment has been successfully scheduled with {doctorName}.
-          </Text>
-          <View style={styles.refPill}>
-            <Text style={styles.refPillText}>Ref: {bookingReference}</Text>
-          </View>
-        </View>
-
-        {/* Detailed Booking Summary Card */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryCardHeader}>Appointment Details</Text>
-
-          <View style={styles.detailRow}>
-            <User size={18} color="#0866C6" />
-            <View style={styles.detailTextCol}>
-              <Text style={styles.detailLabel}>Patient</Text>
-              <Text style={styles.detailValue}>{patientName} (MRN: {patientMrn})</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.detailRow}>
-            <FileCheck size={18} color="#0866C6" />
-            <View style={styles.detailTextCol}>
-              <Text style={styles.detailLabel}>Doctor &amp; Department</Text>
-              <Text style={styles.detailValue}>{doctorName}</Text>
-              <Text style={styles.detailSub}>{department}</Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.dateTimeSplitRow}>
-            <View style={styles.splitCol}>
-              <View style={styles.splitHeader}>
-                <Calendar size={15} color="#0866C6" />
-                <Text style={styles.splitLabel}>Date</Text>
+            {/* Top Status Hero */}
+            {bookingStatus === 'confirmed' ? (
+              <View style={styles.successHero}>
+                <View style={[styles.successIconCircle, { backgroundColor: colors.mintBg }]}>
+                  <CheckCircle2 size={52} color={colors.starTeal} strokeWidth={2.2} />
+                </View>
+                <Text style={[styles.successTitle, { color: colors.starNavy }]}>
+                  Booking &amp; Payment Confirmed!
+                </Text>
+                <Text style={styles.successSubtitle}>
+                  Your appointment with {doctorName} is confirmed and paid.
+                </Text>
+                <View style={[styles.refPill, { backgroundColor: colors.mintBg, borderWidth: 1, borderColor: colors.mintBorder }]}>
+                  <Text style={[styles.refPillText, { color: colors.mintText }]}>
+                    Ref: {bookingReference} {verifiedPaymentId ? `• Paid ₹${consultationFee.toLocaleString('en-IN')}` : ''}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.splitValue}>{date}</Text>
-            </View>
-
-            <View style={styles.verticalSplitLine} />
-
-            <View style={styles.splitCol}>
-              <View style={styles.splitHeader}>
-                <Clock size={15} color="#0866C6" />
-                <Text style={styles.splitLabel}>Time Slot</Text>
+            ) : (
+              <View style={styles.successHero}>
+                <View style={[styles.successIconCircle, { backgroundColor: '#E0F2FE' }]}>
+                  <ShieldCheck size={48} color={colors.starNavy} strokeWidth={2} />
+                </View>
+                <Text style={[styles.successTitle, { color: colors.starNavy }]}>
+                  Review &amp; Pay to Confirm
+                </Text>
+                <Text style={styles.successSubtitle}>
+                  Complete Razorpay payment to confirm your slot with {doctorName} and receive your instant OPD token.
+                </Text>
+                <View style={[styles.refPill, { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A' }]}>
+                  <Text style={[styles.refPillText, { color: '#92400E' }]}>
+                    PAYMENT PENDING • SLOT NOT YET CONFIRMED
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.splitValue}>{time}</Text>
+            )}
+
+            {/* Issued Live OPD Token Card (Only shown AFTER Payment Confirmed) */}
+            {bookingStatus === 'confirmed' && issuedToken ? (
+              <View
+                style={[
+                  styles.summaryCard,
+                  {
+                    backgroundColor: colors.mintBg,
+                    borderColor: colors.mintBorder,
+                    borderWidth: 1.5,
+                    alignItems: 'center',
+                    marginBottom: 14,
+                  },
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Sparkles size={15} color={colors.starTeal} />
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: colors.starTeal, letterSpacing: 0.7 }}>
+                    LIVE OPD TOKEN ISSUED
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 36, fontWeight: '800', color: colors.starNavy, letterSpacing: -1 }}>
+                  {issuedToken.tokenNumber}
+                </Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.mintText, marginTop: 2 }}>
+                  {issuedToken.roomNo || 'Room 104'} • Queue Position #{issuedToken.queuePosition}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Detailed Booking Summary Card */}
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryCardHeader}>Appointment Details</Text>
+
+              <View style={styles.detailRow}>
+                <User size={18} color={colors.starNavy} />
+                <View style={styles.detailTextCol}>
+                  <Text style={styles.detailLabel}>Patient</Text>
+                  <Text style={styles.detailValue}>{patientName} (MRN: {patientMrn})</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.detailRow}>
+                <FileCheck size={18} color={colors.starNavy} />
+                <View style={styles.detailTextCol}>
+                  <Text style={styles.detailLabel}>Doctor &amp; Department</Text>
+                  <Text style={styles.detailValue}>{doctorName}</Text>
+                  <Text style={styles.detailSub}>{department}</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.dateTimeSplitRow}>
+                <View style={styles.splitCol}>
+                  <View style={styles.splitHeader}>
+                    <Calendar size={15} color={colors.starNavy} />
+                    <Text style={styles.splitLabel}>Date</Text>
+                  </View>
+                  <Text style={styles.splitValue}>{date}</Text>
+                </View>
+
+                <View style={styles.verticalSplitLine} />
+
+                <View style={styles.splitCol}>
+                  <View style={styles.splitHeader}>
+                    <Clock size={15} color={colors.starNavy} />
+                    <Text style={styles.splitLabel}>Time Slot</Text>
+                  </View>
+                  <Text style={styles.splitValue}>{time}</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.detailRow}>
+                <MapPin size={18} color={colors.starNavy} />
+                <View style={styles.detailTextCol}>
+                  <Text style={styles.detailLabel}>Consultation Location</Text>
+                  <Text style={styles.detailValue}>
+                    {mode === 'video'
+                      ? 'Online Video Consultation'
+                      : 'Star Hospital — Outpatient Consultation Wing'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.detailRow}>
+                <CreditCard size={18} color={colors.starTeal} />
+                <View style={styles.detailTextCol}>
+                  <Text style={styles.detailLabel}>Consultation Fee &amp; Payment</Text>
+                  <Text style={styles.detailValue}>
+                    ₹{consultationFee.toLocaleString('en-IN')}.00 •{' '}
+                    {bookingStatus === 'confirmed'
+                      ? 'Paid via Razorpay'
+                      : 'Razorpay Payment Required'}
+                  </Text>
+                </View>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.divider} />
+            {/* Action CTAs */}
+            <View style={styles.actionsContainer}>
+              {bookingStatus === 'awaiting_payment' ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.opdTokenButton, { backgroundColor: colors.starNavy }]}
+                    onPress={() => void handlePayAndConfirmBooking()}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Pay Consultation Fee and Confirm Appointment"
+                  >
+                    <CreditCard size={18} color="#FFFFFF" style={styles.btnIcon} />
+                    <Text style={styles.opdTokenButtonText}>
+                      Pay ₹{consultationFee.toLocaleString('en-IN')} &amp; Confirm Appointment
+                    </Text>
+                  </TouchableOpacity>
 
-          <View style={styles.detailRow}>
-            <MapPin size={18} color="#0866C6" />
-            <View style={styles.detailTextCol}>
-              <Text style={styles.detailLabel}>Consultation Location</Text>
-              <Text style={styles.detailValue}>
-                {mode === 'video'
-                  ? 'Online Video Consultation'
-                  : 'Star Hospital — Outpatient Consultation Wing'}
-              </Text>
+                  <TouchableOpacity
+                    style={styles.viewApptsButton}
+                    onPress={() => navigation.goBack()}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.viewApptsButtonText}>Change Time Slot</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.opdTokenButton, { backgroundColor: colors.starTeal }]}
+                    onPress={handleGetOPDToken}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Live OPD Queue Tracker"
+                  >
+                    <Ticket size={18} color="#FFFFFF" style={styles.btnIcon} />
+                    <Text style={styles.opdTokenButtonText}>
+                      {issuedToken
+                        ? `Open Live OPD Queue (${issuedToken.tokenNumber})`
+                        : 'View Live OPD Queue & Control Center'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {verifiedTxnId ? (
+                    <TouchableOpacity
+                      style={styles.viewApptsButton}
+                      onPress={() =>
+                        navigation.navigate('PaymentReceipt', { transactionId: verifiedTxnId })
+                      }
+                      activeOpacity={0.85}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Receipt size={16} color={colors.starNavy} />
+                        <Text style={[styles.viewApptsButtonText, { color: colors.starNavy }]}>
+                          View Official Payment Receipt
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={styles.viewApptsButton}
+                    onPress={() => navigation.navigate('PatientTabs', { screen: 'AppointmentsTab' })}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="View All Appointments"
+                  >
+                    <Text style={styles.viewApptsButtonText}>View My Appointments</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <TouchableOpacity
+                style={styles.homeLink}
+                onPress={() => navigation.navigate('PatientTabs', { screen: 'HomeTab' })}
+                accessibilityRole="button"
+                accessibilityLabel="Back to Home Dashboard"
+              >
+                <Text style={styles.homeLinkText}>Return to Home</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.detailRow}>
-            <CreditCard size={18} color="#0866C6" />
-            <View style={styles.detailTextCol}>
-              <Text style={styles.detailLabel}>Fee &amp; Payment</Text>
-              <Text style={styles.detailValue}>
-                {formatCurrencyPKR(consultationFee)} • Pay at Hospital Reception
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Action CTAs */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={styles.opdTokenButton}
-            onPress={handleGetOPDToken}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Get Live OPD Token"
-          >
-            <Ticket size={18} color="#FFFFFF" style={styles.btnIcon} />
-            <Text style={styles.opdTokenButtonText}>Get Live OPD Token</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.viewApptsButton}
-            onPress={() => navigation.navigate('PatientTabs', { screen: 'AppointmentsTab' })}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="View All Appointments"
-          >
-            <Text style={styles.viewApptsButtonText}>View My Appointments</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.homeLink}
-            onPress={() => navigation.navigate('PatientTabs', { screen: 'HomeTab' })}
-            accessibilityRole="button"
-            accessibilityLabel="Back to Home Dashboard"
-          >
-            <Text style={styles.homeLinkText}>Return to Home</Text>
-          </TouchableOpacity>
-        </View>
           </>
         )}
       </ScrollView>

@@ -384,12 +384,12 @@ export const authService = {
             const staffMember =
               mockStaff.find((s) => s.designation === designation) || mockStaff[0];
             user = {
-              id: staffMember.id,
-              name: staffMember.name,
-              email: staffMember.email,
+              id: designation === 'admin' ? 'staff-admin' : staffMember.id,
+              name: designation === 'admin' ? 'Hospital Administrator' : staffMember.name,
+              email: credentials.login || staffMember.email,
               phone: staffMember.phone,
               role: 'staff',
-              designation: staffMember.designation,
+              designation: (designation as any),
               avatarUrl: staffMember.photoUrl,
               token: `star_mock_jwt_staff_${Date.now()}`,
             };

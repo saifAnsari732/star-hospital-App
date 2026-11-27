@@ -32,6 +32,7 @@ import {
   PharmacyWorklistScreen,
   BillingDashboardScreen,
   StaffPaymentHistoryScreen,
+  StaffPaymentTransactionsScreen,
   BedAdmissionScreen,
   StaffDischargeScreen,
   StaffTasksScreen,
@@ -89,6 +90,7 @@ export type StaffStackParamList = {
       }
     | undefined;
   StaffPaymentHistory: undefined;
+  StaffPaymentTransactions: { patientId?: string; status?: string } | undefined;
   AdmissionBed: undefined;
   StaffDischarge: undefined;
   StaffNotifications: undefined;
@@ -180,6 +182,11 @@ const GuardedPaymentHistory = withRoleGuard(
   'StaffPaymentHistory',
   'Payment History Ledger',
   StaffPaymentHistoryScreen
+);
+const GuardedPaymentTransactions = withRoleGuard(
+  'StaffPaymentTransactions',
+  'Payment Transactions & Refunds',
+  StaffPaymentTransactionsScreen
 );
 const GuardedAdmissionBed = withRoleGuard(
   'AdmissionBed',
@@ -373,6 +380,10 @@ export const StaffNavigator: React.FC = () => {
         <Stack.Screen
           name="StaffPaymentHistory"
           component={GuardedPaymentHistory}
+        />
+        <Stack.Screen
+          name="StaffPaymentTransactions"
+          component={GuardedPaymentTransactions}
         />
         <Stack.Screen name="AdmissionBed" component={GuardedAdmissionBed} />
         <Stack.Screen name="StaffDischarge" component={GuardedDischarge} />

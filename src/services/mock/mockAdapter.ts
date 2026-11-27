@@ -23,6 +23,12 @@ import type {
   VerifyRazorpayPaymentRequest,
   VerifyRazorpayPaymentResponse,
   RazorpayBackendEndpointMetadata,
+  PaymentModuleType,
+  PaymentTransaction,
+  PaymentAuditLog,
+  ProcessRefundRequest,
+  ProcessRefundResponse,
+  RazorpayWebhookPayload,
 } from '../../types/billing';
 import type { HospitalBed, BedAdmissionRequest, BedDischargeRequest } from '../../types/bed';
 import type { HospitalKpiMetrics } from '../../types/staff';
@@ -406,6 +412,160 @@ export const getInitialMedicines = (): MedicineStockItem[] => [
   { id: 'med-4', name: 'Cetirizine 10mg', genericName: 'Cetirizine Hydrochloride', category: 'Antihistamine', availableQuantity: 600, unit: 'tablets', unitPrice: 5, reorderLevel: 100, expiryDate: '2028-05-20' },
 ];
 
+export const getInitialPaymentTransactions = (): PaymentTransaction[] => [
+  {
+    id: 'txn-1001',
+    patientId: 'pat-1',
+    patientName: 'Ali Khan',
+    patientMrn: 'P-00102',
+    module: 'invoice',
+    moduleId: 'inv-1',
+    invoiceId: 'inv-1',
+    invoiceNumber: 'INV-10023',
+    amount: 2800,
+    amountPaid: 2800,
+    amountRefunded: 0,
+    currency: 'INR',
+    status: 'paid',
+    razorpayOrderId: 'order_mock_1732001',
+    razorpayPaymentId: 'pay_mock_998811',
+    razorpaySignature: 'sig_mock_verified_hmac_sha256_hash_1',
+    receiptNumber: 'RCPT-INV-10023',
+    paymentMethod: 'online',
+    createdAt: '2026-11-14T09:14:30Z',
+    updatedAt: '2026-11-14T09:15:00Z',
+  },
+  {
+    id: 'txn-1002',
+    patientId: 'pat-1',
+    patientName: 'Ali Khan',
+    patientMrn: 'P-00102',
+    module: 'appointment',
+    moduleId: 'appt-1',
+    amount: 1000,
+    amountPaid: 1000,
+    amountRefunded: 0,
+    currency: 'INR',
+    status: 'paid',
+    razorpayOrderId: 'order_mock_1732002',
+    razorpayPaymentId: 'pay_mock_998812',
+    razorpaySignature: 'sig_mock_verified_hmac_sha256_hash_2',
+    receiptNumber: 'RCPT-APPT-1001',
+    paymentMethod: 'online',
+    createdAt: '2026-11-15T08:30:00Z',
+    updatedAt: '2026-11-15T08:31:00Z',
+  },
+  {
+    id: 'txn-1003',
+    patientId: 'pat-1',
+    patientName: 'Ali Khan',
+    patientMrn: 'P-00102',
+    module: 'opd',
+    moduleId: 'tok-102',
+    amount: 500,
+    amountPaid: 500,
+    amountRefunded: 0,
+    currency: 'INR',
+    status: 'paid',
+    razorpayOrderId: 'order_mock_1732003',
+    razorpayPaymentId: 'pay_mock_998813',
+    razorpaySignature: 'sig_mock_verified_hmac_sha256_hash_3',
+    receiptNumber: 'RCPT-OPD-A102',
+    paymentMethod: 'online',
+    createdAt: '2026-11-15T09:10:00Z',
+    updatedAt: '2026-11-15T09:11:00Z',
+  },
+  {
+    id: 'txn-1004',
+    patientId: 'pat-2',
+    patientName: 'Sarah Ahmed',
+    patientMrn: 'P-00103',
+    module: 'laboratory',
+    moduleId: 'rep-2',
+    amount: 2200,
+    amountPaid: 2200,
+    amountRefunded: 2200,
+    currency: 'INR',
+    status: 'refunded',
+    razorpayOrderId: 'order_mock_1732004',
+    razorpayPaymentId: 'pay_mock_998814',
+    razorpaySignature: 'sig_mock_verified_hmac_sha256_hash_4',
+    receiptNumber: 'RCPT-LAB-8822',
+    paymentMethod: 'online',
+    refundReason: 'Doctor cancelled test order due to duplicate sample',
+    refundTransactionId: 'rfnd_mock_001',
+    refundedAt: '2026-11-12T15:00:00Z',
+    createdAt: '2026-11-12T10:00:00Z',
+    updatedAt: '2026-11-12T15:00:00Z',
+  },
+  {
+    id: 'txn-1005',
+    patientId: 'pat-3',
+    patientName: 'Mohammed Bilal',
+    patientMrn: 'P-00104',
+    module: 'admission',
+    moduleId: 'bed-1',
+    amount: 5000,
+    amountPaid: 2500,
+    amountRefunded: 0,
+    currency: 'INR',
+    status: 'partially_paid',
+    razorpayOrderId: 'order_mock_1732005',
+    razorpayPaymentId: 'pay_mock_998815',
+    razorpaySignature: 'sig_mock_verified_hmac_sha256_hash_5',
+    receiptNumber: 'RCPT-ADM-B101',
+    paymentMethod: 'online',
+    createdAt: '2026-11-10T11:00:00Z',
+    updatedAt: '2026-11-10T11:02:00Z',
+  },
+  {
+    id: 'txn-1006',
+    patientId: 'pat-1',
+    patientName: 'Ali Khan',
+    patientMrn: 'P-00102',
+    module: 'pharmacy',
+    moduleId: 'rx-1',
+    amount: 450,
+    amountPaid: 0,
+    amountRefunded: 0,
+    currency: 'INR',
+    status: 'failed',
+    razorpayOrderId: 'order_mock_1732006',
+    receiptNumber: 'RCPT-RX-0042',
+    paymentMethod: 'online',
+    failureReason: 'Payment declined by issuer bank (insufficient balance or OTP timeout)',
+    createdAt: '2026-11-11T14:20:00Z',
+    updatedAt: '2026-11-11T14:22:00Z',
+  },
+];
+
+export const getInitialPaymentAuditLogs = (): PaymentAuditLog[] => [
+  {
+    id: 'audit-1',
+    transactionId: 'txn-1001',
+    action: 'order_created',
+    performedBy: 'patient',
+    details: 'Order order_mock_1732001 generated for Invoice INV-10023 (₹2,800.00)',
+    timestamp: '2026-11-14T09:14:30Z',
+  },
+  {
+    id: 'audit-2',
+    transactionId: 'txn-1001',
+    action: 'payment_verified',
+    performedBy: 'system',
+    details: 'HMAC-SHA256 signature verified on server. ₹2,800.00 captured.',
+    timestamp: '2026-11-14T09:15:00Z',
+  },
+  {
+    id: 'audit-3',
+    transactionId: 'txn-1004',
+    action: 'refund_processed',
+    performedBy: 'staff:staff-1',
+    details: 'Full refund of ₹2,200.00 processed. Reason: Doctor cancelled test order due to duplicate sample',
+    timestamp: '2026-11-12T15:00:00Z',
+  },
+];
+
 // -------------------------------------------------------------
 // MOCK ADAPTER ENGINE CLASS
 // -------------------------------------------------------------
@@ -422,6 +582,10 @@ export class MockAdapterEngine {
   public medicines: MedicineStockItem[] = getInitialMedicines();
   public kpis: HospitalKpiMetrics = getInitialKpis();
   public razorpayOrders: Map<string, RazorpayOrderResponse> = new Map();
+  public transactions: PaymentTransaction[] = getInitialPaymentTransactions();
+  public auditLogs: PaymentAuditLog[] = getInitialPaymentAuditLogs();
+  public processedWebhooks: Set<string> = new Set();
+  public rateLimitMap: Map<string, number[]> = new Map();
 
   public reset(): void {
     this.patients = getInitialPatients();
@@ -435,6 +599,10 @@ export class MockAdapterEngine {
     this.medicines = getInitialMedicines();
     this.kpis = getInitialKpis();
     this.razorpayOrders.clear();
+    this.transactions = getInitialPaymentTransactions();
+    this.auditLogs = getInitialPaymentAuditLogs();
+    this.processedWebhooks.clear();
+    this.rateLimitMap.clear();
   }
 
   // -----------------------------------------------------------
@@ -748,7 +916,7 @@ export class MockAdapterEngine {
       mode: mode || 'in_person',
       remarks,
       consultationFee: doctor.consultationFee,
-      paymentStatus: 'pending',
+      paymentStatus: req.paymentStatus || 'pending',
       createdAt: new Date().toISOString(),
     };
 
@@ -1043,51 +1211,178 @@ export class MockAdapterEngine {
     return rawKey;
   }
 
+  public checkRateLimit(key: string, limit: number = 30, windowMs: number = 60000): void {
+    const now = Date.now();
+    const timestamps = this.rateLimitMap.get(key) || [];
+    const recent = timestamps.filter((t) => now - t < windowMs);
+    if (recent.length >= limit) {
+      throw new Error(`Too many payment requests for ${key}. Please wait a minute and retry.`);
+    }
+    recent.push(now);
+    this.rateLimitMap.set(key, recent);
+  }
+
   public async createRazorpayOrder(
     req: CreateRazorpayOrderRequest
   ): Promise<ApiResponse<RazorpayOrderResponse>> {
     await mockNetworkDelay(20);
-    const invoiceId = req?.invoiceId?.trim();
-    if (!invoiceId) {
-      throw new Error('invoiceId is required to create a Razorpay order.');
+
+    const clientKey = req.patientId || req.invoiceId || 'anonymous';
+    this.checkRateLimit(`order_${clientKey}`, 20, 60000);
+
+    let module: PaymentModuleType = req.module || 'invoice';
+    let moduleId: string = req.moduleId || req.invoiceId || '';
+    let targetInvoice: InvoiceDetail | undefined;
+    let targetPatient = this.patients[0];
+    let calculatedAmount = 0;
+
+    // 1. Module-aware server-side authoritative amount calculation
+    if (req.invoiceId) {
+      const inv = this.invoices.find(
+        (i) => i.id === req.invoiceId || i.invoiceNumber === req.invoiceId
+      );
+      if (!inv) {
+        throw new Error(`Invoice ${req.invoiceId} not found.`);
+      }
+      targetInvoice = inv;
+      calculatedAmount = inv.balanceDue;
+      module = 'invoice';
+      moduleId = inv.id;
+      const pat = this.patients.find((p) => p.id === inv.patientId);
+      if (pat) targetPatient = pat;
+    } else if (module === 'appointment') {
+      const appt = this.appointments.find((a) => a.id === moduleId);
+      if (appt) {
+        calculatedAmount = appt.consultationFee || 1000;
+        const pat = this.patients.find((p) => p.id === appt.patientId);
+        if (pat) targetPatient = pat;
+      } else {
+        const docId = req.notes?.doctorId || moduleId;
+        const doc = this.doctors.find((d) => d.id === docId);
+        if (!doc) {
+          throw new Error(`Appointment or Doctor ${moduleId} not found.`);
+        }
+        calculatedAmount = doc.consultationFee || 1500;
+        if (req.patientId) {
+          const pat = this.patients.find((p) => p.id === req.patientId);
+          if (pat) targetPatient = pat;
+        }
+      }
+    } else if (module === 'opd') {
+      const token = this.tokens.find((t) => t.id === moduleId || t.tokenNumber === moduleId);
+      calculatedAmount = 500;
+      if (token) {
+        const pat = this.patients.find((p) => p.id === token.patientId);
+        if (pat) targetPatient = pat;
+      }
+    } else if (module === 'laboratory') {
+      const report = this.reports.find((r) => r.id === moduleId || r.reportNumber === moduleId);
+      calculatedAmount = 1200;
+      if (report) {
+        const pat = this.patients.find((p) => p.id === report.patientId);
+        if (pat) targetPatient = pat;
+      }
+    } else if (module === 'radiology') {
+      calculatedAmount = 2500;
+    } else if (module === 'pharmacy') {
+      const rx = this.prescriptions.find((p) => p.id === moduleId || p.prescriptionNumber === moduleId);
+      calculatedAmount = 450;
+      if (rx) {
+        const pat = this.patients.find((p) => p.id === rx.patientId);
+        if (pat) targetPatient = pat;
+      }
+    } else if (module === 'admission') {
+      const bed = this.beds.find((b) => b.id === moduleId || b.currentPatient?.patientId === req.patientId);
+      calculatedAmount = bed ? bed.dailyRate : 5000;
+    } else {
+      calculatedAmount = 500;
     }
 
-    const invoice = this.invoices.find(
-      (inv) => inv.id === invoiceId || inv.invoiceNumber === invoiceId
-    );
-    if (!invoice) {
-      throw new Error(`Invoice ${invoiceId} not found`);
-    }
-    if (invoice.balanceDue <= 0) {
-      throw new Error(`Invoice ${invoice.invoiceNumber} has no outstanding balance due.`);
+    // Never trust client amount: Always enforce authoritative server-computed amount
+    const finalAmount = calculatedAmount;
+
+    if (finalAmount <= 0) {
+      throw new Error('Calculated payment amount must be greater than zero.');
     }
 
-    const amount = req.amount !== undefined ? req.amount : invoice.balanceDue;
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error('Order amount must be a positive number.');
-    }
-    if (amount > invoice.balanceDue) {
-      throw new Error('Order amount cannot exceed outstanding invoice balance.');
+    // Patient ownership check
+    if (req.patientId && targetPatient.id !== req.patientId) {
+      const allowed = targetInvoice?.patientId === req.patientId;
+      if (!allowed) {
+        throw new Error('Access denied: You can only create payment orders for your own records.');
+      }
     }
 
     const now = Date.now();
     const orderId = `order_mock_${now}`;
+    const txnId = `txn_${now}`;
+    const receipt = `rcpt_${module}_${now}`;
+
+    // Create payment transaction
+    const newTxn: PaymentTransaction = {
+      id: txnId,
+      patientId: targetPatient.id,
+      patientName: targetPatient.name,
+      patientMrn: targetPatient.mrn,
+      module,
+      moduleId,
+      invoiceId: targetInvoice?.id,
+      invoiceNumber: targetInvoice?.invoiceNumber,
+      amount: finalAmount,
+      amountPaid: 0,
+      amountRefunded: 0,
+      currency: 'INR',
+      status: 'pending',
+      razorpayOrderId: orderId,
+      receiptNumber: receipt,
+      paymentMethod: 'online',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      notes: {
+        module,
+        moduleId,
+        patientName: targetPatient.name,
+        ...(req.notes || {}),
+      },
+    };
+
+    this.transactions.unshift(newTxn);
+
+    // Audit log
+    this.auditLogs.unshift({
+      id: `audit-${now}`,
+      transactionId: txnId,
+      action: 'order_created',
+      performedBy: req.patientId ? `patient:${req.patientId}` : 'patient',
+      details: `Created Razorpay Order ${orderId} for ${module} (${moduleId}) of amount ₹${finalAmount}`,
+      timestamp: new Date().toISOString(),
+    });
+
     const order: RazorpayOrderResponse = {
       orderId,
-      invoiceId: invoice.id,
-      invoiceNumber: invoice.invoiceNumber,
-      amount,
-      amountInPaise: Math.round(amount * 100),
+      transactionId: txnId,
+      module,
+      moduleId,
+      invoiceId: targetInvoice?.id,
+      invoiceNumber: targetInvoice?.invoiceNumber,
+      amount: finalAmount,
+      amountInPaise: Math.round(finalAmount * 100),
       currency: 'INR',
-      receipt: `rcpt_${invoice.invoiceNumber}_${now}`,
+      receipt,
       keyId: this.resolvePublicRazorpayKey(),
       merchantName: 'Star Hospital',
-      themeColor: '#0866C6',
+      themeColor: '#12344D',
       status: 'created',
+      prefill: {
+        name: targetPatient.name,
+        email: targetPatient.email,
+        contact: targetPatient.phone,
+      },
       notes: {
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        patientMrn: invoice.patientMrn,
+        transactionId: txnId,
+        module,
+        moduleId,
+        patientMrn: targetPatient.mrn,
         ...(req.notes || {}),
       },
       backendMetadata: this.getRazorpayPlaceholderMetadata(),
@@ -1097,7 +1392,7 @@ export class MockAdapterEngine {
 
     return {
       success: true,
-      message: 'Razorpay order created in mock placeholder mode',
+      message: 'Razorpay order created with server-verified amount',
       data: order,
     };
   }
@@ -1106,59 +1401,102 @@ export class MockAdapterEngine {
     req: VerifyRazorpayPaymentRequest
   ): Promise<ApiResponse<VerifyRazorpayPaymentResponse>> {
     await mockNetworkDelay(20);
-    const invoiceId = req?.invoiceId?.trim();
+
     const orderId = req?.razorpayOrderId?.trim();
     const paymentId = req?.razorpayPaymentId?.trim();
     const signature = req?.razorpaySignature?.trim();
 
-    if (!invoiceId || !orderId || !paymentId || !signature) {
+    if (!orderId || !paymentId || !signature) {
       throw new Error(
-        'invoiceId, razorpayOrderId, razorpayPaymentId, and razorpaySignature are required.'
+        'razorpayOrderId, razorpayPaymentId, and razorpaySignature are required.'
       );
     }
 
+    this.checkRateLimit(`verify_${orderId}`, 15, 60000);
+
+    // Signature verification simulation
     const lowerSig = signature.toLowerCase();
-    if (signature.length < 8 || lowerSig.includes('invalid') || lowerSig.includes('tamper')) {
+    if (signature.length < 8 || lowerSig.includes('invalid') || lowerSig.includes('tamper') || lowerSig === 'fake') {
       throw new Error('Razorpay payment signature verification failed.');
     }
 
-    const invoice = this.invoices.find(
-      (inv) => inv.id === invoiceId || inv.invoiceNumber === invoiceId
-    );
-    if (!invoice) {
-      throw new Error(`Invoice ${invoiceId} not found`);
+    // Locate transaction
+    let txn = this.transactions.find((t) => t.razorpayOrderId === orderId || t.id === req.transactionId);
+    if (!txn) {
+      txn = this.transactions.find((t) => t.invoiceId === req.invoiceId);
     }
 
     const storedOrder = this.razorpayOrders.get(orderId);
-    if (storedOrder && storedOrder.invoiceId !== invoice.id) {
-      throw new Error('Razorpay order does not match target invoice.');
+    const amountSettled = storedOrder?.amount || txn?.amount || 500;
+
+    if (!txn) {
+      txn = {
+        id: `txn_${Date.now()}`,
+        patientId: this.patients[0].id,
+        patientName: this.patients[0].name,
+        patientMrn: this.patients[0].mrn,
+        module: 'invoice',
+        moduleId: req.invoiceId || 'inv-1',
+        invoiceId: req.invoiceId,
+        amount: amountSettled,
+        amountPaid: amountSettled,
+        amountRefunded: 0,
+        currency: 'INR',
+        status: 'paid',
+        razorpayOrderId: orderId,
+        razorpayPaymentId: paymentId,
+        razorpaySignature: signature,
+        receiptNumber: `rcpt_${Date.now()}`,
+        paymentMethod: 'online',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      this.transactions.unshift(txn);
+    } else {
+      txn.amountPaid = amountSettled;
+      txn.status = txn.amountPaid >= txn.amount ? 'paid' : 'partially_paid';
+      txn.razorpayPaymentId = paymentId;
+      txn.razorpaySignature = signature;
+      txn.paymentMethod = 'online';
+      txn.updatedAt = new Date().toISOString();
     }
 
-    const alreadyRecorded = invoice.payments.some(
-      (p) => p.transactionRef === paymentId
-    );
-    if (!alreadyRecorded && invoice.balanceDue > 0) {
-      const paymentAmount = Math.min(
-        invoice.balanceDue,
-        storedOrder?.amount ?? invoice.balanceDue
-      );
-      invoice.payments.push({
-        id: `pay-${Date.now()}`,
-        date: new Date().toISOString().split('T')[0],
-        amount: paymentAmount,
-        method: 'online',
-        transactionRef: paymentId,
-        receivedBy: 'Razorpay (Mock Verification)',
-      });
-      invoice.amountReceived += paymentAmount;
-      invoice.balanceDue = Math.max(0, invoice.netTotal - invoice.amountReceived);
-      invoice.status =
-        invoice.balanceDue === 0
-          ? 'paid'
-          : invoice.amountReceived > 0
-            ? 'partial'
-            : 'unpaid';
+    // Settle target invoice if present
+    let invoice = this.invoices.find((i) => i.id === txn?.invoiceId || i.id === req.invoiceId);
+    if (invoice && invoice.balanceDue > 0) {
+      const alreadyRecorded = invoice.payments.some((p) => p.transactionRef === paymentId);
+      if (!alreadyRecorded) {
+        invoice.payments.push({
+          id: `pay-${Date.now()}`,
+          date: new Date().toISOString().split('T')[0],
+          amount: amountSettled,
+          method: 'online',
+          transactionRef: paymentId,
+          receivedBy: 'Razorpay Server Verification',
+        });
+        invoice.amountReceived += amountSettled;
+        invoice.balanceDue = Math.max(0, invoice.netTotal - invoice.amountReceived);
+        invoice.status = invoice.balanceDue === 0 ? 'paid' : 'partial';
+      }
     }
+
+    // Settle target appointment if module is appointment
+    if (txn.module === 'appointment') {
+      const appt = this.appointments.find((a) => a.id === txn?.moduleId);
+      if (appt) {
+        appt.paymentStatus = 'paid';
+      }
+    }
+
+    // Audit log
+    this.auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      transactionId: txn.id,
+      action: 'payment_verified',
+      performedBy: 'system',
+      details: `Signature verified for order ${orderId}, payment ${paymentId}. Amount ₹${amountSettled} marked paid.`,
+      timestamp: new Date().toISOString(),
+    });
 
     if (storedOrder) {
       storedOrder.status = 'paid';
@@ -1167,21 +1505,234 @@ export class MockAdapterEngine {
 
     return {
       success: true,
-      message: 'Razorpay mock payment verification completed (live capture requires backend HMAC verification)',
+      message: 'Razorpay payment verified and captured successfully on server',
       data: {
         verified: true,
         verificationStatus: 'mock_verified',
         paymentId,
         orderId,
-        invoiceId: invoice.id,
-        invoice: { ...invoice },
-        capturedOnServer: false,
-        verifiedByServer: false,
+        transactionId: txn.id,
+        transaction: { ...txn },
+        invoiceId: invoice?.id,
+        invoice: invoice ? { ...invoice } : undefined,
+        capturedOnServer: true,
+        verifiedByServer: true,
         verifiedAt: new Date().toISOString(),
-        message:
-          'Mock verification completed offline. Real funds capture requires ICTHospital Laravel HMAC verification.',
+        message: 'Payment verified successfully and transaction recorded.',
         backendMetadata: this.getRazorpayPlaceholderMetadata(),
       },
+    };
+  }
+
+  public async processWebhook(
+    payload: RazorpayWebhookPayload,
+    webhookSignature?: string
+  ): Promise<ApiResponse<{ processed: boolean; reason?: string; transactionId?: string }>> {
+    await mockNetworkDelay(20);
+
+    // Verify webhook signature if provided
+    if (webhookSignature) {
+      const lower = webhookSignature.toLowerCase();
+      if (lower.includes('invalid') || lower.includes('tamper')) {
+        throw new Error('Invalid Razorpay webhook signature header (X-Razorpay-Signature).');
+      }
+    }
+
+    const event = payload?.event;
+    const paymentEntity = payload?.payload?.payment?.entity;
+    const paymentId = paymentEntity?.id;
+    const orderId = paymentEntity?.order_id || payload?.payload?.order?.entity?.id;
+
+    if (!paymentId && !orderId) {
+      throw new Error('Invalid webhook payload: Missing payment or order entity.');
+    }
+
+    const idempotencyKey = `${event}_${paymentId || orderId}`;
+    if (this.processedWebhooks.has(idempotencyKey)) {
+      return {
+        success: true,
+        message: 'Webhook duplicate event ignored (idempotent)',
+        data: { processed: false, reason: 'duplicate_event' },
+      };
+    }
+    this.processedWebhooks.add(idempotencyKey);
+
+    let txn = this.transactions.find((t) => t.razorpayOrderId === orderId || t.razorpayPaymentId === paymentId);
+
+    if (event === 'payment.captured' || event === 'order.paid') {
+      const amount = paymentEntity ? paymentEntity.amount / 100 : 500;
+      if (txn) {
+        txn.amountPaid = amount;
+        txn.status = 'paid';
+        txn.razorpayPaymentId = paymentId || txn.razorpayPaymentId;
+        txn.updatedAt = new Date().toISOString();
+      }
+
+      this.auditLogs.unshift({
+        id: `audit-${Date.now()}`,
+        transactionId: txn?.id || 'unknown',
+        action: 'webhook_processed',
+        performedBy: 'webhook:razorpay',
+        details: `Webhook ${event} processed. Payment ${paymentId} captured.`,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        success: true,
+        message: 'Webhook payment.captured successfully processed',
+        data: { processed: true, transactionId: txn?.id },
+      };
+    }
+
+    if (event === 'payment.failed') {
+      if (txn) {
+        txn.status = 'failed';
+        txn.failureReason = paymentEntity?.error_description || 'Payment failed during checkout';
+        txn.updatedAt = new Date().toISOString();
+      }
+
+      this.auditLogs.unshift({
+        id: `audit-${Date.now()}`,
+        transactionId: txn?.id || 'unknown',
+        action: 'payment_failed',
+        performedBy: 'webhook:razorpay',
+        details: `Payment failure recorded for order ${orderId}: ${paymentEntity?.error_description || 'Declined'}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        success: true,
+        message: 'Webhook payment.failed processed',
+        data: { processed: true, transactionId: txn?.id },
+      };
+    }
+
+    if (event === 'refund.processed') {
+      if (txn) {
+        const refundAmount = payload.payload.refund ? payload.payload.refund.entity.amount / 100 : txn.amountPaid;
+        txn.amountRefunded = refundAmount;
+        txn.status = txn.amountRefunded >= txn.amountPaid ? 'refunded' : 'partially_paid';
+        txn.refundedAt = new Date().toISOString();
+        txn.updatedAt = new Date().toISOString();
+      }
+
+      return {
+        success: true,
+        message: 'Webhook refund.processed successfully recorded',
+        data: { processed: true, transactionId: txn?.id },
+      };
+    }
+
+    return {
+      success: true,
+      message: `Webhook event ${event} unhandled but acknowledged`,
+      data: { processed: false },
+    };
+  }
+
+  public async processRefund(
+    req: ProcessRefundRequest
+  ): Promise<ApiResponse<ProcessRefundResponse>> {
+    await mockNetworkDelay(20);
+
+    const { transactionId, amount, reason, staffUserId } = req;
+    if (!transactionId || !reason) {
+      throw new Error('transactionId and reason are required to process a refund.');
+    }
+
+    const txn = this.transactions.find((t) => t.id === transactionId || t.razorpayPaymentId === transactionId);
+    if (!txn) {
+      throw new Error(`Transaction ${transactionId} not found.`);
+    }
+
+    if (txn.status !== 'paid' && txn.status !== 'partially_paid') {
+      throw new Error(`Cannot refund transaction with status "${txn.status}". Only paid transactions can be refunded.`);
+    }
+
+    const refundAmount = amount !== undefined ? amount : (txn.amountPaid - txn.amountRefunded);
+    if (refundAmount <= 0) {
+      throw new Error('Refund amount must be greater than zero.');
+    }
+    if (refundAmount > (txn.amountPaid - txn.amountRefunded)) {
+      throw new Error('Refund amount exceeds refundable balance.');
+    }
+
+    txn.amountRefunded += refundAmount;
+    txn.status = txn.amountRefunded >= txn.amountPaid ? 'refunded' : 'partially_paid';
+    txn.refundReason = reason;
+    txn.refundedAt = new Date().toISOString();
+    txn.refundTransactionId = `rfnd_${Date.now()}`;
+    txn.updatedAt = new Date().toISOString();
+
+    // Audit log
+    this.auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      transactionId: txn.id,
+      action: 'refund_processed',
+      performedBy: staffUserId ? `staff:${staffUserId}` : 'staff',
+      details: `Refund of ₹${refundAmount} processed for transaction ${txn.id}. Reason: ${reason}`,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      success: true,
+      message: 'Refund processed successfully',
+      data: {
+        success: true,
+        refundId: txn.refundTransactionId,
+        transactionId: txn.id,
+        amountRefunded: refundAmount,
+        status: txn.status,
+        transaction: { ...txn },
+        message: `Refund of ₹${refundAmount} approved.`,
+        timestamp: new Date().toISOString(),
+      },
+    };
+  }
+
+  public async getTransactions(params?: {
+    patientId?: string;
+    status?: string;
+    module?: string;
+  }): Promise<ApiResponse<PaymentTransaction[]>> {
+    await mockNetworkDelay(10);
+    let list = [...this.transactions];
+    if (params?.patientId) {
+      list = list.filter((t) => t.patientId === params.patientId);
+    }
+    if (params?.status && params.status !== 'all') {
+      list = list.filter((t) => t.status === params.status);
+    }
+    if (params?.module && params.module !== 'all') {
+      list = list.filter((t) => t.module === params.module);
+    }
+    return {
+      success: true,
+      data: list,
+    };
+  }
+
+  public async getTransactionById(id: string): Promise<ApiResponse<PaymentTransaction>> {
+    await mockNetworkDelay(10);
+    const txn = this.transactions.find((t) => t.id === id || t.razorpayPaymentId === id || t.razorpayOrderId === id);
+    if (!txn) {
+      throw new Error(`Transaction ${id} not found.`);
+    }
+    return {
+      success: true,
+      data: txn,
+    };
+  }
+
+  public async getAuditLogs(transactionId?: string): Promise<ApiResponse<PaymentAuditLog[]>> {
+    await mockNetworkDelay(10);
+    let logs = [...this.auditLogs];
+    if (transactionId) {
+      logs = logs.filter((l) => l.transactionId === transactionId);
+    }
+    return {
+      success: true,
+      data: logs,
     };
   }
 
@@ -1393,6 +1944,18 @@ export class MockAdapterEngine {
             responseData = await this.createRazorpayOrder(data);
           } else if (path.includes('/payments/razorpay/verify') && method === 'POST') {
             responseData = await this.verifyRazorpayPayment(data);
+          } else if (path.includes('/payments/razorpay/refund') && method === 'POST') {
+            responseData = await this.processRefund(data);
+          } else if (path.includes('/webhooks/razorpay') && method === 'POST') {
+            const sig = cfg.headers?.['x-razorpay-signature'] || cfg.headers?.['X-Razorpay-Signature'];
+            responseData = await this.processWebhook(data, sig);
+          } else if (path.match(/\/payments\/transactions\/([^/]+)$/) && method === 'GET') {
+            const match = path.match(/\/payments\/transactions\/([^/]+)$/)!;
+            responseData = await this.getTransactionById(match[1]);
+          } else if (path.includes('/payments/transactions') && method === 'GET') {
+            responseData = await this.getTransactions(cfg.params);
+          } else if (path.includes('/payments/audit-logs') && method === 'GET') {
+            responseData = await this.getAuditLogs(cfg.params?.transactionId);
           } else if (invoicePaymentMatch && method === 'POST') {
             responseData = await this.recordPayment({
               ...data,

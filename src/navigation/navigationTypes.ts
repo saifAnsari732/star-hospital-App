@@ -54,6 +54,7 @@ export type PatientTabParamList = {
 
 export type PatientStackParamList = {
   PatientTabs: NavigatorScreenParams<PatientTabParamList> | undefined;
+  StaffOPDQueue: { doctorId?: string } | undefined;
   OPDToken: { tokenId?: string; tokenNumber?: string; doctorId?: string } | undefined;
   QueueStatus: { tokenNumber?: string; doctorId?: string } | undefined;
   FindDoctors: { specialty?: string; query?: string } | undefined;
@@ -94,7 +95,24 @@ export type PatientStackParamList = {
   HealthRecords: undefined;
   Bills: undefined;
   PaymentHistory: undefined;
-  PaymentDetails: { invoiceId?: string; paymentId?: string; transactionRef?: string };
+  PaymentDetails: {
+    invoiceId?: string;
+    paymentId?: string;
+    transactionRef?: string;
+    transactionId?: string;
+    module?: 'appointment' | 'opd' | 'laboratory' | 'radiology' | 'pharmacy' | 'admission' | 'invoice';
+    moduleId?: string;
+  };
+  PaymentStatus: {
+    transactionId: string;
+    status: 'paid' | 'pending' | 'failed' | 'refunded' | 'partially_paid';
+    message?: string;
+    receiptNumber?: string;
+    amount?: number;
+  };
+  PaymentReceipt: {
+    transactionId: string;
+  };
   Admissions: undefined;
   VideoConsultation: {
     appointmentId?: string;
@@ -182,6 +200,7 @@ export type StaffStackParamList = {
   PharmacyDispense: { prescriptionId?: string } | undefined;
   BillingInvoice: { patientId?: string; invoiceId?: string } | undefined;
   StaffPaymentHistory: { patientId?: string } | undefined;
+  StaffPaymentTransactions: { patientId?: string; status?: string } | undefined;
   AdmissionBed: { patientId?: string } | undefined;
   StaffDischarge: { admissionId?: string; patientId?: string } | undefined;
   StaffTasks: undefined;

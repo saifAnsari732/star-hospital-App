@@ -231,3 +231,5 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
 });
+
+export default ContactHospitalScreen;

@@ -18,3 +18,4 @@ export { StaffTasksScreen } from './StaffTasksScreen';
 export { StaffNotificationsScreen } from './StaffNotificationsScreen';
 export { StaffSettingsScreen } from './StaffSettingsScreen';
 export { StaffProfileScreen } from './StaffProfileScreen';
+export { StaffPaymentTransactionsScreen } from './StaffPaymentTransactionsScreen';

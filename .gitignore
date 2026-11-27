@@ -17,3 +17,7 @@ web-build/
 .env
 .env.local
 .env.production
+
+# Test artifacts & screenshots
+test-artifacts/
+tests/screenshots/

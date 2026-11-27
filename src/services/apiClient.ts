@@ -1,6 +1,7 @@
 import axios, {
   AxiosInstance,
   AxiosResponse,
+  AxiosRequestConfig,
   InternalAxiosRequestConfig,
 } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -182,19 +183,19 @@ export async function withMockFallback<T>(
 export const apiClient = {
   instance: axiosInstance,
 
-  get: <T = unknown>(url: string, config?: InternalAxiosRequestConfig): Promise<AxiosResponse<T>> => {
+  get: <T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
     return axiosInstance.get<T>(url, config);
   },
 
-  post: <T = unknown>(url: string, data?: unknown, config?: InternalAxiosRequestConfig): Promise<AxiosResponse<T>> => {
+  post: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
     return axiosInstance.post<T>(url, data, config);
   },
 
-  put: <T = unknown>(url: string, data?: unknown, config?: InternalAxiosRequestConfig): Promise<AxiosResponse<T>> => {
+  put: <T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
     return axiosInstance.put<T>(url, data, config);
   },
 
-  delete: <T = unknown>(url: string, config?: InternalAxiosRequestConfig): Promise<AxiosResponse<T>> => {
+  delete: <T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> => {
     return axiosInstance.delete<T>(url, config);
   },
 

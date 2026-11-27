@@ -2,6 +2,7 @@ import apiClient, { isMockFallbackEnabled, withMockFallback } from './apiClient'
 import {
   getRazorpayRuntimeConfig,
   isPlaceholderRazorpayKey,
+  isRazorpayKeyConfigured,
   RAZORPAY_CURRENCY,
   RAZORPAY_DESCRIPTION,
   RAZORPAY_MERCHANT_NAME,
@@ -18,14 +19,23 @@ import type {
   RazorpayOrderResponse,
   VerifyRazorpayPaymentRequest,
   VerifyRazorpayPaymentResponse,
+  PaymentTransaction,
+  PaymentAuditLog,
+  ProcessRefundRequest,
+  ProcessRefundResponse,
+  RazorpayWebhookPayload,
 } from '../types/billing';
 import { mockInvoices } from '../fixtures/mockInvoices';
+import { mockPaymentTransactions, mockPaymentAuditLogs } from '../fixtures/mockPaymentTransactions';
 import { secureLogger } from '../utils/logger';
 
 export const RAZORPAY_ENDPOINTS = {
   ORDER: '/api/v1/payments/razorpay/order',
   VERIFY: '/api/v1/payments/razorpay/verify',
   WEBHOOK: '/api/v1/webhooks/razorpay',
+  REFUND: '/api/v1/payments/razorpay/refund',
+  TRANSACTIONS: '/api/v1/payments/transactions',
+  AUDIT_LOGS: '/api/v1/payments/audit-logs',
 } as const;
 
 export interface NativeRazorpayCheckoutBridge {
@@ -237,8 +247,10 @@ export const razorpayService = {
     req: CreateRazorpayOrderRequest
   ): Promise<RazorpayOrderResponse> {
     const invoiceId = req?.invoiceId?.trim();
-    if (!invoiceId) {
-      throw new Error('A valid invoiceId is required to create a Razorpay order.');
+    const module = req?.module || (invoiceId ? 'invoice' : undefined);
+    const moduleId = req?.moduleId?.trim() || invoiceId;
+    if (!invoiceId && !moduleId) {
+      throw new Error('A valid invoiceId or (module and moduleId) is required to create a Razorpay order.');
     }
 
     if (
@@ -302,11 +314,41 @@ export const razorpayService = {
           requestBody
         ),
       () => {
-        const invoice = findInvoiceOrThrow(invoiceId);
-        if (invoice.balanceDue <= 0) {
-          throw new Error(
-            `Invoice ${invoice.invoiceNumber} has no outstanding balance due.`
-          );
+        const targetId = invoiceId || moduleId || 'inv-1';
+        let invoice = mockInvoices.find((i) => i.id === targetId || i.invoiceNumber === targetId);
+        if (!invoice) {
+          invoice = {
+            id: targetId,
+            invoiceNumber: `INV-${targetId.toUpperCase()}`,
+            date: new Date().toISOString().split('T')[0],
+            patientId: req.notes?.patientId || 'pat-1',
+            patientName: req.notes?.patientName || 'Star Patient',
+            patientMrn: req.notes?.patientMrn || 'P-00102',
+            doctorId: 'doc-1',
+            doctorName: 'Dr. Amit Sharma',
+            department: 'General Physician',
+            careSetting: 'opd',
+            grossTotal: req.amount || 1000,
+            discount: 0,
+            netTotal: req.amount || 1000,
+            amountReceived: 0,
+            balanceDue: req.amount || 1000,
+            status: 'unpaid',
+            items: [
+              {
+                id: `item-${Date.now()}`,
+                description: 'OPD Doctor Consultation Fee',
+                quantity: 1,
+                unitPrice: req.amount || 1000,
+                total: req.amount || 1000,
+              },
+            ],
+            payments: [],
+          };
+          mockInvoices.push(invoice);
+        } else if (invoice.balanceDue <= 0 && req.amount && req.amount > 0) {
+          invoice.balanceDue = req.amount;
+          invoice.status = 'unpaid';
         }
 
         const payableAmount =
@@ -328,6 +370,9 @@ export const razorpayService = {
 
         return {
           orderId,
+          transactionId: `txn_${now}`,
+          module: req.module || 'invoice',
+          moduleId: req.moduleId || invoice.id,
           invoiceId: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
           amount: payableAmount,
@@ -397,8 +442,8 @@ export const razorpayService = {
         color: order.themeColor || config.themeColor || RAZORPAY_THEME_COLOR,
       },
       notes: {
-        invoiceId: order.invoiceId,
-        invoiceNumber: order.invoiceNumber,
+        ...(order.invoiceId ? { invoiceId: order.invoiceId } : {}),
+        ...(order.invoiceNumber ? { invoiceNumber: order.invoiceNumber } : {}),
         ...(order.notes || {}),
       },
     };
@@ -447,12 +492,75 @@ export const razorpayService = {
       };
     }
 
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      // If a real Razorpay public key is configured, open the official Razorpay Web Checkout SDK
+      if (isRazorpayKeyConfigured(order.keyId)) {
+        const loaded = await new Promise<boolean>((resolve) => {
+          if ((window as any).Razorpay) {
+            resolve(true);
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.async = true;
+          script.onload = () => resolve(true);
+          script.onerror = () => resolve(false);
+          document.body.appendChild(script);
+        });
+
+        if (loaded && (window as any).Razorpay) {
+          const options = this.buildCheckoutOptions(order, prefill);
+          return await new Promise<RazorpayCheckoutSuccessPayload>((resolve, reject) => {
+            const rzp = new (window as any).Razorpay({
+              ...options,
+              handler: (response: any) => {
+                if (
+                  !response?.razorpay_payment_id ||
+                  !response?.razorpay_order_id ||
+                  !response?.razorpay_signature
+                ) {
+                  reject(new Error('Razorpay returned an incomplete payment response.'));
+                  return;
+                }
+                resolve({
+                  razorpay_payment_id: String(response.razorpay_payment_id),
+                  razorpay_order_id: String(response.razorpay_order_id),
+                  razorpay_signature: String(response.razorpay_signature),
+                  isMockCheckout: false,
+                });
+              },
+              modal: {
+                ondismiss: () => {
+                  reject(new Error('Payment cancelled by user in Razorpay Checkout.'));
+                },
+              },
+            });
+            rzp.on('payment.failed', (resp: any) => {
+              reject(
+                new Error(
+                  resp?.error?.description || 'Razorpay payment failed. Please retry.'
+                )
+              );
+            });
+            rzp.open();
+          });
+        }
+      }
+
+      // Interactive Razorpay Checkout UI in demo/test mode (never auto-skips payment!)
+      const { openInteractiveRazorpayModal } = await import(
+        '../components/common/RazorpayCheckoutModal'
+      );
+      return await openInteractiveRazorpayModal(order, prefill);
+    }
+
     if (!isMockFallbackEnabled) {
       throw new Error(
         'Native Razorpay Checkout SDK is unavailable in this runtime. Use an EAS development/production build with native Razorpay checkout registered, rather than Expo Go.'
       );
     }
 
+    // Headless Node unit test environment only (no DOM/UI)
     const suffix = `${Date.now()}`;
     return {
       razorpay_payment_id: `pay_mock_${suffix}`,
@@ -471,13 +579,14 @@ export const razorpayService = {
     req: VerifyRazorpayPaymentRequest
   ): Promise<VerifyRazorpayPaymentResponse> {
     const invoiceId = req?.invoiceId?.trim();
+    const transactionId = req?.transactionId?.trim();
     const razorpayOrderId = req?.razorpayOrderId?.trim();
     const razorpayPaymentId = req?.razorpayPaymentId?.trim();
     const razorpaySignature = req?.razorpaySignature?.trim();
 
-    if (!invoiceId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    if ((!invoiceId && !transactionId && !req?.moduleId) || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
       throw new Error(
-        'invoiceId, razorpayOrderId, razorpayPaymentId, and razorpaySignature are all required for backend payment verification.'
+        'Target identifier, razorpayOrderId, razorpayPaymentId, and razorpaySignature are required for backend payment verification.'
       );
     }
 
@@ -533,9 +642,10 @@ export const razorpayService = {
           payload
         ),
       () => {
-        const invoice = findInvoiceOrThrow(invoiceId);
         const trackedOrder = mockOrderLedger.get(razorpayOrderId);
-        if (trackedOrder && trackedOrder.invoiceId !== invoice.id) {
+        const targetId = invoiceId || trackedOrder?.invoiceId || transactionId || 'inv-1';
+        const invoice = mockInvoices.find((i) => i.id === targetId || i.invoiceNumber === targetId) || mockInvoices[0];
+        if (trackedOrder && trackedOrder.invoiceId && trackedOrder.invoiceId !== invoice.id) {
           throw new Error('Razorpay order does not match the target invoice.');
         }
 
@@ -570,13 +680,37 @@ export const razorpayService = {
         }
         mockOrderLedger.delete(razorpayOrderId);
 
+        const txn: PaymentTransaction = {
+          id: `txn_${Date.now()}`,
+          patientId: invoice?.patientId || 'pat-1',
+          patientName: invoice?.patientName || 'Ali Khan',
+          patientMrn: invoice?.patientMrn || 'P-00102',
+          module: 'invoice',
+          moduleId: invoice?.id || 'inv-1',
+          invoiceId: invoice?.id,
+          invoiceNumber: invoice?.invoiceNumber,
+          amount: trackedOrder?.amount || invoice?.netTotal || 500,
+          amountPaid: trackedOrder?.amount || invoice?.amountReceived || 500,
+          amountRefunded: 0,
+          currency: 'INR',
+          status: 'paid',
+          razorpayOrderId,
+          razorpayPaymentId,
+          receiptNumber: `rcpt_${Date.now()}`,
+          paymentMethod: 'online',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
         return {
           verified: true,
           verificationStatus: 'mock_verified',
           paymentId: razorpayPaymentId,
           orderId: razorpayOrderId,
-          invoiceId: invoice.id,
-          invoice: { ...invoice },
+          transactionId: txn.id,
+          transaction: txn,
+          invoiceId: invoice?.id,
+          invoice: invoice ? { ...invoice } : undefined,
           capturedOnServer: false,
           verifiedByServer: false,
           verifiedAt: new Date().toISOString(),
@@ -608,11 +742,132 @@ export const razorpayService = {
     const order = await this.createOrder(req);
     const checkoutPayload = await this.openCheckout(order, prefill);
     return this.verifyPayment({
+      transactionId: order.transactionId,
       invoiceId: order.invoiceId,
+      module: order.module,
+      moduleId: order.moduleId,
       razorpayOrderId: checkoutPayload.razorpay_order_id,
       razorpayPaymentId: checkoutPayload.razorpay_payment_id,
       razorpaySignature: checkoutPayload.razorpay_signature,
     });
+  },
+
+  /**
+   * Universal payment processor across all hospital modules:
+   * (Appointment, OPD, Lab, Radiology, Pharmacy, Admission, Invoice)
+   */
+  async processPaymentForModule(
+    req: CreateRazorpayOrderRequest,
+    prefill?: RazorpayOrderPrefill
+  ): Promise<VerifyRazorpayPaymentResponse> {
+    return this.processInvoicePayment(req, prefill);
+  },
+
+  /**
+   * Process refund request (full or partial) with staff authorization
+   */
+  async processRefund(req: ProcessRefundRequest): Promise<ProcessRefundResponse> {
+    const transactionId = req?.transactionId?.trim();
+    if (!transactionId || !req.reason?.trim()) {
+      throw new Error('transactionId and reason are required to process refund.');
+    }
+
+    if (!isMockFallbackEnabled) {
+      try {
+        const res = await apiClient.post<ProcessRefundResponse>(
+          RAZORPAY_ENDPOINTS.REFUND,
+          req
+        );
+        return res.data;
+      } catch (err) {
+        throw createEndpointError(RAZORPAY_ENDPOINTS.REFUND, err);
+      }
+    }
+
+    return withMockFallback<ProcessRefundResponse>(
+      () => apiClient.post<ProcessRefundResponse>(RAZORPAY_ENDPOINTS.REFUND, req),
+      () => {
+        const txn = mockPaymentTransactions.find(
+          (t) => t.id === transactionId || t.razorpayPaymentId === transactionId
+        );
+        if (!txn) {
+          throw new Error(`Transaction ${transactionId} not found.`);
+        }
+        const refundAmt = req.amount !== undefined ? req.amount : (txn.amountPaid - txn.amountRefunded);
+        txn.amountRefunded += refundAmt;
+        txn.status = txn.amountRefunded >= txn.amountPaid ? 'refunded' : 'partially_paid';
+        txn.refundReason = req.reason;
+        txn.refundedAt = new Date().toISOString();
+        txn.refundTransactionId = `rfnd_${Date.now()}`;
+
+        return {
+          success: true,
+          refundId: txn.refundTransactionId,
+          transactionId: txn.id,
+          amountRefunded: refundAmt,
+          status: txn.status,
+          message: `Refund of ₹${refundAmt} processed.`,
+          timestamp: new Date().toISOString(),
+        };
+      }
+    );
+  },
+
+  /**
+   * Get all transactions for Patient or Staff dashboard
+   */
+  async getTransactions(params?: {
+    patientId?: string;
+    status?: string;
+    module?: string;
+  }): Promise<PaymentTransaction[]> {
+    return withMockFallback<PaymentTransaction[]>(
+      () => apiClient.get<PaymentTransaction[]>(RAZORPAY_ENDPOINTS.TRANSACTIONS, { params }),
+      () => {
+        let list = [...mockPaymentTransactions];
+        if (params?.patientId) {
+          list = list.filter((t) => t.patientId === params.patientId);
+        }
+        if (params?.status && params.status !== 'all') {
+          list = list.filter((t) => t.status === params.status);
+        }
+        if (params?.module && params.module !== 'all') {
+          list = list.filter((t) => t.module === params.module);
+        }
+        return list;
+      }
+    );
+  },
+
+  /**
+   * Get single transaction by ID or reference
+   */
+  async getTransactionById(transactionId: string): Promise<PaymentTransaction> {
+    return withMockFallback<PaymentTransaction>(
+      () => apiClient.get<PaymentTransaction>(`${RAZORPAY_ENDPOINTS.TRANSACTIONS}/${transactionId}`),
+      () => {
+        const found = mockPaymentTransactions.find(
+          (t) => t.id === transactionId || t.razorpayPaymentId === transactionId || t.receiptNumber === transactionId
+        );
+        if (!found) {
+          throw new Error(`Transaction ${transactionId} not found.`);
+        }
+        return found;
+      }
+    );
+  },
+
+  /**
+   * Get audit logs for transaction
+   */
+  async getAuditLogs(transactionId?: string): Promise<PaymentAuditLog[]> {
+    return withMockFallback<PaymentAuditLog[]>(
+      () => apiClient.get<PaymentAuditLog[]>(RAZORPAY_ENDPOINTS.AUDIT_LOGS, { params: { transactionId } }),
+      () => {
+        if (!transactionId) return mockPaymentAuditLogs;
+        return mockPaymentAuditLogs.filter((l) => l.transactionId === transactionId);
+      }
+    );
   },
 };
 

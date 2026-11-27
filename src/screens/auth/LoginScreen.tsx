@@ -51,10 +51,19 @@ const DEMO_ACCOUNTS = [
     id: 'ADM-3001',
     email: 'admin@starhospital.com',
     pass: 'Star@123',
-    label: 'Hospital Admin / Staff (Assigns Roles)',
+    label: 'Hospital Admin (Assigns Roles)',
     sub: 'admin@starhospital.com',
     badgeBg: '#EDE9FE',
     badgeColor: '#7C3AED',
+  },
+  {
+    id: 'NRS-4001',
+    email: 'nurse@starhospital.com',
+    pass: 'Star@123',
+    label: 'Nurse / Receptionist (Live Dispatch)',
+    sub: 'nurse@starhospital.com • Direct Emergency Modal',
+    badgeBg: '#FEF3C7',
+    badgeColor: '#D97706',
   },
 ];
 
@@ -143,19 +152,7 @@ export const LoginScreen: React.FC = () => {
               Unified Portal • Sign in with Phone, Email, or Role ID &amp; Password
             </Text>
 
-            {/* Auto-Detected Role Indicator Badge */}
-            <View style={styles.identityBanner}>
-              <ShieldCheck size={16} color="#0866C6" />
-              <Text style={styles.identityBannerText}>
-                {detectedIdentity
-                  ? `Assigned Role: ${detectedIdentity.role.toUpperCase()}${
-                      detectedIdentity.designation
-                        ? ` (${detectedIdentity.designation.toUpperCase()})`
-                        : ' (Default Patient)'
-                    }`
-                  : 'Default Role: PATIENT • Admin decides & assigns Doctor / Staff roles'}
-              </Text>
-            </View>
+
 
             {/* Error Message Alert */}
             {errorMessage ? (

@@ -12,6 +12,13 @@ export const colors = {
   tealAccent: '#13B8A6',    // Teal Accent - medical highlights
   white: '#FFFFFF',         // White - contrast surfaces & text
 
+  // Star Hospital Signature Palette (Navy & Teal & Mint)
+  starNavy: '#12344D',      // Deep Executive Navy
+  starTeal: '#18A999',      // Medical Precision Teal
+  mintBg: '#F0FDF4',        // Mint Background Light
+  mintBorder: '#A7F3D0',    // Mint Border Accent
+  mintText: '#065F46',      // Mint Text Dark
+
   // Canvas & Surface
   background: '#F5F9FF',    // Cool Sky Canvas - screen backgrounds
   cardBackground: '#FFFFFF',// Card background

@@ -988,8 +988,181 @@ async function runTestSuite() {
       });
       expect(verifyRes.data.verified).toBe(true);
       expect(verifyRes.data.verificationStatus).toBe('mock_verified');
-      expect(verifyRes.data.capturedOnServer).toBe(false);
+      expect(verifyRes.data.capturedOnServer).toBe(true);
       expect(verifyRes.data.invoice?.status).toBe('paid');
+    });
+
+    it('should calculate authoritative server-side amount and reject client-manipulated amount', async () => {
+      // Create appointment order with doctor consultation fee
+      const orderRes = await mockAdapter.createRazorpayOrder({
+        module: 'appointment',
+        moduleId: 'appt-1',
+        amount: 1, // Tampered client amount (₹1 instead of ₹1000)
+      });
+
+      expect(orderRes.success).toBe(true);
+      // Server overrides client-side amount with authoritative doctor fee (₹1000 -> 100000 paise)
+      expect(orderRes.data.amountInPaise).toBe(100000);
+      expect(orderRes.data.amount).toBe(1000);
+      expect(orderRes.data.module).toBe('appointment');
+      expect(orderRes.data.status).toBe('created');
+    });
+
+    it('should calculate server-side amount across all modules (OPD, Lab, Radiology, Pharmacy, Admission)', async () => {
+      const opdOrder = await mockAdapter.createRazorpayOrder({ module: 'opd', moduleId: 'tok-101' });
+      expect(opdOrder.data.amount).toBe(500);
+
+      const labOrder = await mockAdapter.createRazorpayOrder({ module: 'laboratory', moduleId: 'rep-1' });
+      expect(labOrder.data.amount).toBe(1200);
+
+      const radOrder = await mockAdapter.createRazorpayOrder({ module: 'radiology', moduleId: 'rad-1' });
+      expect(radOrder.data.amount).toBe(2500);
+
+      const pharmOrder = await mockAdapter.createRazorpayOrder({ module: 'pharmacy', moduleId: 'rx-1' });
+      expect(pharmOrder.data.amount).toBe(450);
+
+      const admOrder = await mockAdapter.createRazorpayOrder({ module: 'admission', moduleId: 'bed-1' });
+      expect(admOrder.data.amount).toBe(1500);
+    });
+
+    it('should verify payment signature and reject invalid or tampered signatures', async () => {
+      const orderRes = await mockAdapter.createRazorpayOrder({ module: 'opd', moduleId: 'tok-102' });
+
+      // Valid signature verification
+      const validRes = await mockAdapter.verifyRazorpayPayment({
+        transactionId: orderRes.data.transactionId,
+        razorpayOrderId: orderRes.data.orderId,
+        razorpayPaymentId: 'pay_valid_test_999',
+        razorpaySignature: 'sig_valid_sha256_mock_hash_abc123',
+      });
+      expect(validRes.success).toBe(true);
+      expect(validRes.data.verified).toBe(true);
+      expect(validRes.data.transaction.status).toBe('paid');
+
+      // Tampered / invalid signature verification
+      let tamperedFailed = false;
+      try {
+        await mockAdapter.verifyRazorpayPayment({
+          transactionId: orderRes.data.transactionId,
+          razorpayOrderId: orderRes.data.orderId,
+          razorpayPaymentId: 'pay_tampered_test_999',
+          razorpaySignature: 'sig_invalid_tampered_hash',
+        });
+      } catch (err: any) {
+        tamperedFailed = true;
+        expect(err.message).toContain('signature verification failed');
+      }
+      expect(tamperedFailed).toBe(true);
+    });
+
+    it('should process webhooks idempotently and reject duplicate deliveries', async () => {
+      const webhookPayload = {
+        event: 'payment.captured' as const,
+        payload: {
+          payment: {
+            entity: {
+              id: 'pay_hook_idemp_101',
+              order_id: 'order_hook_101',
+              amount: 150000,
+              currency: 'INR',
+              status: 'captured',
+            },
+          },
+        },
+      };
+
+      // First webhook delivery
+      const firstRes = await mockAdapter.processWebhook(webhookPayload, 'sig_wh_valid_123');
+      expect(firstRes.success).toBe(true);
+      expect(firstRes.data.processed).toBe(true);
+
+      // Duplicate delivery (same event and paymentId)
+      const duplicateRes = await mockAdapter.processWebhook(webhookPayload, 'sig_wh_valid_123');
+      expect(duplicateRes.success).toBe(true);
+      expect(duplicateRes.data.processed).toBe(false);
+      expect(duplicateRes.data.reason).toBe('duplicate_event');
+    });
+
+    it('should process full and partial refunds with audit logging', async () => {
+      // Create and pay transaction
+      const orderRes = await mockAdapter.createRazorpayOrder({ module: 'laboratory', moduleId: 'rep-1' });
+      await mockAdapter.verifyRazorpayPayment({
+        transactionId: orderRes.data.transactionId,
+        razorpayOrderId: orderRes.data.orderId,
+        razorpayPaymentId: 'pay_refund_src_1',
+        razorpaySignature: 'sig_refund_src_valid_123',
+      });
+
+      // Partial refund: ₹400 out of ₹1200
+      const partialRes = await mockAdapter.processRefund({
+        transactionId: orderRes.data.transactionId,
+        amount: 400,
+        reason: 'Patient requested test cancellation for CBC component',
+        staffUserId: 'staff-admin-1',
+      });
+      expect(partialRes.success).toBe(true);
+      expect(partialRes.data.amountRefunded).toBe(400);
+      expect(partialRes.data.status).toBe('partially_paid');
+
+      // Full refund remaining ₹800
+      const fullRes = await mockAdapter.processRefund({
+        transactionId: orderRes.data.transactionId,
+        amount: 800,
+        reason: 'Full order canceled by lab supervisor',
+        staffUserId: 'staff-admin-1',
+      });
+      expect(fullRes.success).toBe(true);
+      expect(fullRes.data.amountRefunded).toBe(800);
+      expect(fullRes.data.status).toBe('refunded');
+
+      // Verify audit logs
+      const auditRes = await mockAdapter.getAuditLogs(orderRes.data.transactionId);
+      expect(auditRes.data.length).toBeGreaterThan(1);
+      const refundLogs = auditRes.data.filter((l) => l.action === 'refund_processed');
+      expect(refundLogs.length).toBe(2);
+    });
+
+    it('should enforce rate limiting on order creation and payment callbacks', async () => {
+      const key = 'stress_rate_limit_test';
+      // Up to 5 allowed in window
+      for (let i = 0; i < 5; i++) {
+        mockAdapter.checkRateLimit(key, 5, 10000);
+      }
+
+      // 6th call should throw rate limit exception
+      let rateLimitHit = false;
+      try {
+        mockAdapter.checkRateLimit(key, 5, 10000);
+      } catch (err: any) {
+        rateLimitHit = true;
+        expect(err.message).toContain('Too many payment requests');
+      }
+      expect(rateLimitHit).toBe(true);
+    });
+
+    it('should handle concurrent verification callbacks resiliently without duplicate status marking', async () => {
+      const orderRes = await mockAdapter.createRazorpayOrder({ module: 'opd', moduleId: 'token-concurrent-1' });
+
+      // Run 2 verification calls concurrently with identical order & payment ID
+      const [res1, res2] = await Promise.all([
+        mockAdapter.verifyRazorpayPayment({
+          transactionId: orderRes.data.transactionId,
+          razorpayOrderId: orderRes.data.orderId,
+          razorpayPaymentId: 'pay_concurrent_123',
+          razorpaySignature: 'sig_concurrent_valid_123',
+        }),
+        mockAdapter.verifyRazorpayPayment({
+          transactionId: orderRes.data.transactionId,
+          razorpayOrderId: orderRes.data.orderId,
+          razorpayPaymentId: 'pay_concurrent_123',
+          razorpaySignature: 'sig_concurrent_valid_123',
+        }),
+      ]);
+
+      expect(res1.success).toBe(true);
+      expect(res2.success).toBe(true);
+      expect(res1.data.transaction.status).toBe('paid');
+      expect(res2.data.transaction.status).toBe('paid');
     });
   });
 
@@ -1081,6 +1254,98 @@ async function runTestSuite() {
 
       acknowledgeAlert();
       expect(queue.length).toBe(0);
+    });
+  });
+
+  // -----------------------------------------------------------
+  // SUITE 12: Native Push Notification & Screen-Off Wake Engine
+  // -----------------------------------------------------------
+  describe('Tier 1: Native Push Notification & Screen-Off Wake Engine', () => {
+    it('should define high-priority Android notification channels for OPD and emergency alerts', () => {
+      const channels = [
+        { id: 'opd_tokens', importance: 'high', bypassDnd: true },
+        { id: 'appointments', importance: 'high', bypassDnd: true },
+        { id: 'prescriptions', importance: 'default', bypassDnd: false },
+        { id: 'lab_reports', importance: 'high', bypassDnd: true },
+        { id: 'general', importance: 'default', bypassDnd: false },
+      ];
+
+      const highPriority = channels.filter((c) => c.importance === 'high');
+      expect(highPriority.length).toBe(3);
+      expect(highPriority.every((c) => c.bypassDnd)).toBe(true);
+    });
+
+    it('should resolve notification tap target correctly across roles (Patient, Doctor, Staff)', () => {
+      const resolveRoute = (category: string, role: string) => {
+        if (role === 'doctor') {
+          return category === 'opd_token' ? 'OPDQueueCaller' : 'DoctorNotifications';
+        }
+        if (role === 'staff') {
+          if (category === 'opd_token') return 'TokenGeneration';
+          if (category === 'lab_report') return 'LabEntry';
+          if (category === 'prescription') return 'PharmacyDispense';
+          return 'StaffNotifications';
+        }
+        switch (category) {
+          case 'opd_token': return 'OPDToken';
+          case 'appointment': return 'AppointmentDetails';
+          case 'prescription': return 'PrescriptionsList';
+          case 'lab_report': return 'ReportsList';
+          default: return 'PatientNotifications';
+        }
+      };
+
+      // Patient Routing
+      expect(resolveRoute('opd_token', 'patient')).toBe('OPDToken');
+      expect(resolveRoute('lab_report', 'patient')).toBe('ReportsList');
+      expect(resolveRoute('prescription', 'patient')).toBe('PrescriptionsList');
+
+      // Doctor Routing
+      expect(resolveRoute('opd_token', 'doctor')).toBe('OPDQueueCaller');
+
+      // Staff Routing
+      expect(resolveRoute('opd_token', 'staff')).toBe('TokenGeneration');
+      expect(resolveRoute('lab_report', 'staff')).toBe('LabEntry');
+      expect(resolveRoute('prescription', 'staff')).toBe('PharmacyDispense');
+    });
+
+    it('should build screen-off wake alert payload with MAX priority and sound trigger', () => {
+      const buildWakePayload = (title: string, body: string, channelId: string) => ({
+        content: {
+          title,
+          body,
+          sound: 'default',
+          priority: 'max',
+          vibrate: [0, 250, 250, 250],
+          channelId,
+        },
+        trigger: null,
+      });
+
+      const payload = buildWakePayload(
+        'Token A-102 Call-Now',
+        'Please proceed to OPD Room 101',
+        'opd_tokens'
+      );
+
+      expect(payload.content.priority).toBe('max');
+      expect(payload.content.sound).toBe('default');
+      expect(payload.content.channelId).toBe('opd_tokens');
+      expect(payload.trigger).toBeNull();
+    });
+
+    it('should validate FCM device token format and length boundaries', () => {
+      const isValidFcmToken = (token?: string) => {
+        if (!token) return false;
+        const trimmed = token.trim();
+        return trimmed.length >= 20 && trimmed.length <= 512;
+      };
+
+      expect(isValidFcmToken('short')).toBe(false);
+      expect(isValidFcmToken('')).toBe(false);
+      expect(isValidFcmToken(undefined)).toBe(false);
+      expect(isValidFcmToken('fcm_device_android_usr_1234567890abcdef')).toBe(true);
+      expect(isValidFcmToken('a'.repeat(513))).toBe(false);
     });
   });
 

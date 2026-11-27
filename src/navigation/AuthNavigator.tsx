@@ -26,7 +26,7 @@ export const AuthNavigator: React.FC = () => {
 
   return (
     <Stack.Navigator
-      initialRouteName="Splash"
+      initialRouteName="Login"
       screenOptions={({ route }) => ({
         headerShown: false,
         animation: 'slide_from_right',

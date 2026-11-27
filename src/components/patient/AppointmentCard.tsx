@@ -138,21 +138,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
     </>
   );
 
-  if (hasInteractiveActions) {
-    return <View style={styles.card}>{cardContent}</View>;
-  }
-
-  return (
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.85}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`Appointment with ${appointment.doctorName} on ${appointment.date} at ${appointment.timeSlot}`}
-    >
-      {cardContent}
-    </TouchableOpacity>
-  );
+  return <View style={styles.card}>{cardContent}</View>;
 };
 
 const styles = StyleSheet.create({

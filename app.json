@@ -14,6 +14,14 @@
           "resizeMode": "contain",
           "backgroundColor": "#0866C6"
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0866C6",
+          "sounds": []
+        }
       ]
     ],
     "ios": {
@@ -27,6 +35,7 @@
       }
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0866C6"
@@ -36,7 +45,11 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.POST_NOTIFICATIONS",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.TURN_SCREEN_ON",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "web": {

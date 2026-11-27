@@ -39,12 +39,12 @@ export const SplashScreen: React.FC = () => {
     ]).start();
 
     const timer = setTimeout(() => {
-      if (!isLoading && !isAuthenticated) {
-        if (navigation && 'replace' in navigation) {
-          (navigation as AuthNavigationProp<'Splash'>).replace('Welcome');
-        }
+      if (navigation && 'replace' in navigation) {
+        (navigation as AuthNavigationProp<'Splash'>).replace('Welcome');
+      } else if (navigation && 'navigate' in navigation) {
+        (navigation as any).navigate('Welcome');
       }
-    }, 2000);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [isLoading, isAuthenticated, navigation, fadeAnim, scaleAnim]);

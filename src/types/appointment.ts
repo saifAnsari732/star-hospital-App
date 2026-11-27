@@ -59,6 +59,9 @@ export interface BookAppointmentRequest {
   durationMinutes?: number;
   mode: AppointmentMode;
   remarks?: string;
+  paymentStatus?: 'pending' | 'paid' | 'waived';
+  paymentId?: string;
+  transactionId?: string;
 }
 
 export interface RescheduleAppointmentRequest {
